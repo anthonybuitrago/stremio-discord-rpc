@@ -1,15 +1,18 @@
+import sys
+import subprocess
 import time
 import threading
 import requests
 import urllib.parse
-import os
 from pypresence import Presence, ActivityType
 from pystray import Icon, MenuItem, Menu
 from PIL import Image
+import os
 
-# Importamos nuestros propios módulos
+# Importamos nuestros módulos propios
 import config_manager
 import utils
+import gui  # <--- IMPORTANTE: Importamos la ventana gráfica
 
 # Variables Globales
 APP_RUNNING = True
@@ -62,8 +65,7 @@ def bucle_logica():
                         # Stats Técnicos (Hover)
                         try:
                             total = video.get('length', 0)
-                            # Fix para packs
-                            if total == 0 and 'files' in video:
+                            if total == 0 and 'files' in video: 
                                 for f in video['files']:
                                     if f.get('length', 0) > total: total = f.get('length', 0)
                             
@@ -98,7 +100,7 @@ def bucle_logica():
                                 RPC.update(
                                     activity_type=ActivityType.WATCHING,
                                     details=nombre_limpio,
-                                    state=None, # Minimalista
+                                    state=None, 
                                     large_image=poster_actual,
                                     large_text=stats_text,
                                     start=tiempo_inicio,
@@ -111,7 +113,7 @@ def bucle_logica():
                             except:
                                 RPC = conectar_discord()
                 else:
-                    pass # Anti-Buffer activo
+                    pass 
             else:
                 if ultimo_titulo != "":
                     try:
@@ -129,7 +131,8 @@ def bucle_logica():
     try: RPC.close() 
     except: pass
 
-# --- GUI TRAY (Hilo Principal) ---
+# --- FUNCIONES DEL MENÚ (GUI TRAY) ---
+
 def salir(icon, item):
     global APP_RUNNING
     APP_RUNNING = False
@@ -138,19 +141,45 @@ def salir(icon, item):
 def abrir_logs(icon, item):
     os.startfile(config_manager.PATH_LOG)
 
+def abrir_config(icon, item):
+    # LANZAMIENTO INTELIGENTE EN PROCESO SEPARADO
+    # Esto evita que la ventana se congele
+    if getattr(sys, 'frozen', False):
+        # Si estamos en modo .exe (futuro)
+        subprocess.Popen([sys.executable, "gui"])
+    else:
+        # Si estamos en modo script (.py)
+        subprocess.Popen([sys.executable, "gui.py"])
+
+# --- INICIO PRINCIPAL ---
 if __name__ == '__main__':
+    # --- TRUCO PARA GUI EN EXE ---
+    # Si el script recibe el argumento "gui", solo abre la ventana y se cierra.
+    if len(sys.argv) > 1 and sys.argv[1] == "gui":
+        import gui
+        gui.abrir_ventana()
+        sys.exit()
+    # -----------------------------
+
     utils.gestionar_logs()
     
-    # Iniciar hilo lógico
+    # Iniciar hilo lógico (Discord)
     hilo = threading.Thread(target=bucle_logica)
     hilo.daemon = True
     hilo.start()
     
-    # Iniciar GUI
+    # Iniciar GUI (Icono Bandeja)
     try:
         if os.path.exists(config_manager.PATH_ICON):
             img = Image.open(config_manager.PATH_ICON)
-            menu = Menu(MenuItem('Ver Logs', abrir_logs), MenuItem('Salir', salir))
+            
+            menu = Menu(
+                MenuItem('Configuración ⚙️', abrir_config),
+                MenuItem('Iniciar con Windows', utils.toggle_autostart, checked=lambda item: utils.check_autostart()),
+                MenuItem('Ver Logs', abrir_logs),
+                MenuItem('Salir', salir)
+            )
+            
             icon = Icon("StremioRPC", img, "Stremio RPC", menu)
             icon.run()
         else:

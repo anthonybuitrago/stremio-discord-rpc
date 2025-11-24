@@ -3,10 +3,12 @@ import re
 import requests
 import urllib.parse
 import os
+import sys
+import subprocess
 from config_manager import PATH_LOG
 
 def log(mensaje):
-    """Escribe mensajes en el archivo de registro y en consola."""
+    """Escribe en el archivo de log y en consola"""
     texto = f"[{time.strftime('%H:%M:%S')}] {mensaje}"
     try:
         print(texto)
@@ -15,7 +17,7 @@ def log(mensaje):
     except: pass
 
 def gestionar_logs():
-    """Limpia el archivo de log si es demasiado grande (>1MB)."""
+    """Limpia el archivo de log si es muy grande"""
     try:
         if os.path.exists(PATH_LOG) and os.path.getsize(PATH_LOG) > 1 * 1024 * 1024:
             with open(PATH_LOG, "w", encoding="utf-8") as f:
@@ -23,7 +25,6 @@ def gestionar_logs():
     except: pass
 
 def limpiar_nombre(nombre_crudo, lista_negra):
-    """Limpia el nombre del archivo usando la lista negra."""
     nombre = nombre_crudo.replace(".", " ")
     nombre = re.sub(r'\[.*?\]', '', nombre)
     nombre = re.sub(r'\(.*?\)', '', nombre)
@@ -36,10 +37,10 @@ def limpiar_nombre(nombre_crudo, lista_negra):
     nombre = re.sub(r'\s+', ' ', nombre).strip()
     nombre = nombre.strip(".-_ ")
 
-    return nombre if nombre else "Stremio"
+    if not nombre: return "Stremio"
+    return nombre
 
 def formato_velocidad(bytes_sec):
-    """Convierte bytes/s a MB/s o KB/s legible."""
     try:
         if bytes_sec > 1024 * 1024:
             return f"{bytes_sec / (1024 * 1024):.1f} MB/s"
@@ -50,7 +51,6 @@ def formato_velocidad(bytes_sec):
     except: return "0 KB/s"
 
 def extraer_minutos(texto_runtime):
-    """Intenta sacar el número de minutos de un texto como '124 min'."""
     try:
         numeros = re.findall(r'\d+', str(texto_runtime))
         if numeros: return int(numeros[0])
@@ -58,35 +58,65 @@ def extraer_minutos(texto_runtime):
     return 0
 
 def obtener_metadatos(nombre_limpio):
-    """Busca carátula y duración en la API de Cinemeta."""
     datos = {"poster": "stremio_logo", "runtime": 0}
     if nombre_limpio == "Stremio": return datos
     
     try:
         query = urllib.parse.quote(nombre_limpio)
-        # 1. Intentar como Serie
         url_series = f"https://v3-cinemeta.strem.io/catalog/series/top/search={query}.json"
         resp = requests.get(url_series, timeout=2)
         data = resp.json()
-        
         if 'metas' in data and len(data['metas']) > 0:
             item = data['metas'][0]
             datos["poster"] = item.get('poster', 'stremio_logo')
             datos["runtime"] = extraer_minutos(item.get('runtime', 0))
             return datos
         
-        # 2. Intentar como Película
         url_movie = f"https://v3-cinemeta.strem.io/catalog/movie/top/search={query}.json"
         resp = requests.get(url_movie, timeout=2)
         data = resp.json()
-        
         if 'metas' in data and len(data['metas']) > 0:
             item = data['metas'][0]
             datos["poster"] = item.get('poster', 'stremio_logo')
             datos["runtime"] = extraer_minutos(item.get('runtime', 0))
             return datos
-            
     except Exception as e:
-        log(f"⚠️ Error buscando metadatos: {e}")
+        log(f"⚠️ Error Metadata: {e}")
     
     return datos
+
+# --- LÓGICA AUTO-START (NUEVO) ---
+def get_startup_path():
+    """Devuelve la ruta de la carpeta Inicio de Windows"""
+    return os.path.join(os.getenv('APPDATA'), r'Microsoft\Windows\Start Menu\Programs\Startup', 'StremioRPC.lnk')
+
+def check_autostart():
+    """Devuelve True si el acceso directo ya existe"""
+    return os.path.exists(get_startup_path())
+
+def toggle_autostart(icon, item):
+    """Crea o borra el acceso directo usando PowerShell"""
+    link_path = get_startup_path()
+    
+    # Detectamos qué archivo estamos ejecutando (.py o .exe)
+    if getattr(sys, 'frozen', False):
+        target = sys.executable # El .exe
+    else:
+        target = os.path.abspath(sys.argv[0]) # El .py
+        
+    work_dir = os.path.dirname(target)
+
+    if os.path.exists(link_path):
+        try:
+            os.remove(link_path)
+            log("🗑️ Auto-start desactivado (Acceso directo borrado).")
+        except Exception as e:
+            log(f"Error borrando link: {e}")
+    else:
+        try:
+            # Script de PowerShell para crear acceso directo sin librerías extra
+            ps_script = f"$s=(New-Object -COM WScript.Shell).CreateShortcut('{link_path}');$s.TargetPath='{target}';$s.WorkingDirectory='{work_dir}';$s.Save()"
+            subprocess.run(["powershell", "-Command", ps_script], creationflags=0x08000000) # NO_WINDOW flag
+            log("✅ Auto-start activado (Acceso directo creado).")
+        except Exception as e:
+            log(f"Error creando link: {e}")

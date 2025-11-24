@@ -54,5 +54,6 @@
         "subtitulado",
         "DDP5.1"
     ],
-    "fixed_duration_minutes": 0
+    "fixed_duration_minutes": 0,
+    "show_search_button": true
 }
