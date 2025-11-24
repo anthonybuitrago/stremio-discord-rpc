@@ -35,13 +35,11 @@ try:
     UPDATE_INTERVAL = config.get("update_interval", 5)
     TOLERANCIA_LATIDO = config.get("tolerance_seconds", 60)
     PALABRAS_BASURA = config.get("blacklisted_words", [])
-    DURACION_FIJA = config.get("fixed_duration_minutes", 0)
 except:
     CLIENT_ID = client_id
     UPDATE_INTERVAL = 5
     PALABRAS_BASURA = []
     TOLERANCIA_LATIDO = 60
-    DURACION_FIJA = 0
 
 # Limpieza logs
 try:
@@ -70,53 +68,54 @@ def conectar_discord():
             time.sleep(10)
     return rpc
 
-# --- FUNCIÓN DE LIMPIEZA MEJORADA (V31) ---
 def limpiar_nombre(nombre_crudo):
     nombre_limpio = nombre_crudo
-    
-    # 1. Reemplazar puntos por espacios (Fallout.S01 -> Fallout S01)
-    nombre_limpio = nombre_limpio.replace(".", " ")
-    
-    # 2. Quitar corchetes y parentesis
     nombre_limpio = re.sub(r'\[.*?\]', '', nombre_limpio)
     nombre_limpio = re.sub(r'\(.*?\)', '', nombre_limpio)
-    
-    # 3. Quitar palabras basura
     for basura in PALABRAS_BASURA:
-        # Usamos regex con \b para asegurar que borre palabras completas
-        # y evitar borrar letras dentro de otras palabras
-        nombre_limpio = re.sub(r'\b' + re.escape(basura) + r'\b', '', nombre_limpio, flags=re.IGNORECASE)
-        # Respaldo simple por si acaso
         nombre_limpio = re.sub(basura, '', nombre_limpio, flags=re.IGNORECASE)
-    
-    # 4. Limpieza final de extensiones y espacios dobles
-    nombre_limpio = nombre_limpio.replace("mkv", "").replace("mp4", "").replace("avi", "")
-    # Reemplazar múltiples espacios por uno solo
-    nombre_limpio = re.sub(r'\s+', ' ', nombre_limpio).strip()
+    nombre_limpio = nombre_limpio.replace(".mkv", "").replace(".mp4", "").replace("  ", " ").strip()
     nombre_limpio = nombre_limpio.strip(".-_ ")
-
     if not nombre_limpio: nombre_limpio = "Stremio"
     return nombre_limpio
 
-def formato_velocidad(bytes_sec):
+# --- SOLO BUSCAMOS EL PÓSTER ---
+def obtener_poster(nombre_limpio):
+    if nombre_limpio == "Stremio": return "stremio_logo"
+    
     try:
-        if bytes_sec > 1024 * 1024:
-            return f"{bytes_sec / (1024 * 1024):.1f} MB/s"
-        elif bytes_sec > 1024:
-            return f"{bytes_sec / 1024:.0f} KB/s"
-        else:
-            return "0 KB/s"
-    except:
-        return "0 KB/s"
+        query = urllib.parse.quote(nombre_limpio)
+        
+        # Intentamos Serie
+        url_series = f"https://v3-cinemeta.strem.io/catalog/series/top/search={query}.json"
+        resp = requests.get(url_series, timeout=2)
+        data = resp.json()
+        
+        if 'metas' in data and len(data['metas']) > 0:
+            return data['metas'][0].get('poster', 'stremio_logo')
+        
+        # Intentamos Peli
+        url_movie = f"https://v3-cinemeta.strem.io/catalog/movie/top/search={query}.json"
+        resp_mov = requests.get(url_movie, timeout=2)
+        data_mov = resp_mov.json()
+        
+        if 'metas' in data_mov and len(data_mov['metas']) > 0:
+            return data_mov['metas'][0].get('poster', 'stremio_logo')
+
+    except Exception as e:
+        log(f"⚠️ Error Poster: {e}")
+    
+    return "stremio_logo"
 
 def bucle_principal():
     global APP_RUNNING
-    log("🚀 Hilo V31.0 (Deep Clean) iniciado.")
+    log("🚀 Hilo V35.0 (Final Aesthetic) iniciado.")
     RPC = conectar_discord()
     ultimo_titulo = ""
     ultima_actualizacion = 0
     tiempo_inicio_anime = None
-    tiempo_fin_estimado = None
+    
+    cache_poster = "stremio_logo"
 
     while APP_RUNNING:
         try:
@@ -133,36 +132,15 @@ def bucle_principal():
                     video_actual = list(data.values())[-1]
                     nombre_crudo = str(video_actual.get('name', ''))
                     
-                    try:
-                        total_bytes = video_actual.get('length', 0)
-                        if total_bytes == 0 and 'files' in video_actual:
-                            for f in video_actual['files']:
-                                if f.get('length', 0) > total_bytes:
-                                    total_bytes = f.get('length', 0)
-
-                        descargado_bytes = video_actual.get('downloaded', 0)
-                        velocidad_bytes = video_actual.get('downSpeed', 0)
-                        
-                        porcentaje = 0
-                        if total_bytes > 0:
-                            porcentaje = int((descargado_bytes / total_bytes) * 100)
-                        
-                        velocidad_str = formato_velocidad(velocidad_bytes)
-                        texto_tecnico = f"⬇️ {velocidad_str} | 💾 {porcentaje}%"
-                    except:
-                        texto_tecnico = "Stremio"
-
                     if nombre_crudo:
                         titulo_limpio = limpiar_nombre(nombre_crudo)
                         tiempo_actual = time.time()
                         
                         if titulo_limpio != ultimo_titulo:
-                            tiempo_inicio_anime = time_now = time.time()
-                            if DURACION_FIJA > 0:
-                                tiempo_fin_estimado = time_now + (DURACION_FIJA * 60)
-                            else:
-                                tiempo_fin_estimado = None
-                        
+                            tiempo_inicio_anime = time.time()
+                            log(f"🔎 Buscando póster para: {titulo_limpio}")
+                            cache_poster = obtener_poster(titulo_limpio)
+
                         if titulo_limpio != ultimo_titulo or (tiempo_actual - ultima_actualizacion > 15):
                             try:
                                 url_busqueda = f"https://www.google.com/search?q={urllib.parse.quote(titulo_limpio)}+anime"
@@ -170,16 +148,15 @@ def bucle_principal():
                                 RPC.update(
                                     activity_type=ActivityType.WATCHING,
                                     details=titulo_limpio,
-                                    state=None,
-                                    large_image="stremio_logo", 
-                                    large_text=texto_tecnico,
+                                    state=None, # <--- SEGUNDA LÍNEA SIEMPRE VACÍA
+                                    large_image=cache_poster, 
+                                    large_text="Stremio",
                                     start=tiempo_inicio_anime,
-                                    end=tiempo_fin_estimado,
                                     buttons=[{"label": "Buscar Anime 🔎", "url": url_busqueda}]
                                 )
                                 ultimo_titulo = titulo_limpio
                                 ultima_actualizacion = tiempo_actual
-                                log(f"Actualizado: {titulo_limpio} ({texto_tecnico})")
+                                log(f"Actualizado: {titulo_limpio}")
                             except Exception as e_discord:
                                 log(f"🔥 Error Discord: {e_discord}")
                                 RPC = conectar_discord()
