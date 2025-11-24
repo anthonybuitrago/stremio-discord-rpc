@@ -11,7 +11,7 @@ else:
 
 PATH_CONFIG = os.path.join(BASE_DIR, "config.json")
 PATH_LOG = os.path.join(BASE_DIR, "stremio_log.txt")
-PATH_ICON = os.path.join(BASE_DIR, "rpc.ico")
+PATH_ICON = os.path.join(BASE_DIR, "assets", "rpc.ico")
 
 # --- CONFIGURACIÓN POR DEFECTO ---
 # Esto se usa si el archivo JSON no existe o falla
