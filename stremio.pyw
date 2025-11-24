@@ -4,7 +4,7 @@ import time
 import re
 import sys
 import os
-import urllib.parse
+import json
 
 # ---------------------------------------------------------
 # TU ID AQUÍ
@@ -12,34 +12,41 @@ import urllib.parse
 client_id = "1441601634374385696"
 # ---------------------------------------------------------
 
+# --- CARGAR CONFIGURACIÓN ---
 try:
     CARPETA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
-    ARCHIVO_LOG = os.path.join(CARPETA_SCRIPT, "stremio_log.txt")
+    PATH_CONFIG = os.path.join(CARPETA_SCRIPT, "config.json")
+    PATH_LOG = os.path.join(CARPETA_SCRIPT, "stremio_log.txt")
+    
+    with open(PATH_CONFIG, "r", encoding="utf-8") as f:
+        config = json.load(f)
+        
+    CLIENT_ID = config.get("client_id", client_id)
+    UPDATE_INTERVAL = config.get("update_interval", 5)
+    TOLERANCIA_LATIDO = config.get("tolerance_seconds", 60)
+    PALABRAS_BASURA = config.get("blacklisted_words", [])
+
 except:
-    CARPETA_SCRIPT = ""
-    ARCHIVO_LOG = "stremio_log.txt"
+    CLIENT_ID = client_id
+    UPDATE_INTERVAL = 5
+    PALABRAS_BASURA = []
+    TOLERANCIA_LATIDO = 60
+    PATH_LOG = "stremio_log.txt"
 
 def log(mensaje):
     texto = f"[{time.strftime('%H:%M:%S')}] {mensaje}"
     try:
         print(texto)
-        with open(ARCHIVO_LOG, "a", encoding="utf-8") as f:
+        with open(PATH_LOG, "a", encoding="utf-8") as f:
             f.write(texto + "\n")
     except: pass
-
-# Lista de palabras a eliminar del título
-palabras_basura = [
-    "1080p", "720p", "480p", "4k", "2160p", "hdrip", "web-dl", "bluray", 
-    "x265", "hevc", "aac", "h264", "webrip", "dual audio", "10bit", 
-    "anime time", "eng sub"
-]
 
 def conectar_discord():
     rpc = None
     while rpc is None:
         try:
             log("Conectando a Discord...")
-            rpc = Presence(client_id)
+            rpc = Presence(CLIENT_ID)
             rpc.connect()
             log("✅ Conectado a Discord")
         except:
@@ -48,28 +55,21 @@ def conectar_discord():
 
 def limpiar_nombre(nombre_crudo):
     nombre_limpio = nombre_crudo
-    
-    # 1. Quitar contenido entre corchetes [] y paréntesis ()
     nombre_limpio = re.sub(r'\[.*?\]', '', nombre_limpio)
     nombre_limpio = re.sub(r'\(.*?\)', '', nombre_limpio)
-    
-    # 2. Quitar palabras técnicas
-    for basura in palabras_basura:
+    for basura in PALABRAS_BASURA:
         nombre_limpio = re.sub(basura, '', nombre_limpio, flags=re.IGNORECASE)
-    
-    # 3. Limpieza final de extensiones y espacios
     nombre_limpio = nombre_limpio.replace(".mkv", "").replace(".mp4", "").replace("  ", " ").strip()
     nombre_limpio = nombre_limpio.strip(".-_ ")
-
     if not nombre_limpio: nombre_limpio = "Stremio"
-    
     return nombre_limpio
 
 # --- INICIO ---
-log("🚀 Script V18.0 (Clean Minimalist) Iniciado...")
+log("🚀 Script V25.0 (Session Timer) Iniciado...")
 RPC = conectar_discord()
 ultimo_titulo = ""
 ultima_actualizacion = 0
+tiempo_inicio_anime = None # Variable para guardar cuándo empezó el capítulo
 
 while True:
     try:
@@ -90,19 +90,21 @@ while True:
                     titulo_limpio = limpiar_nombre(nombre_crudo)
                     tiempo_actual = time.time()
                     
-                    # Actualizamos si cambió el título o para mantener latido
-                    if titulo_limpio != ultimo_titulo or (tiempo_actual - ultima_actualizacion > 60):
+                    # SI CAMBIÓ EL ANIME: Reseteamos el reloj
+                    if titulo_limpio != ultimo_titulo:
+                        tiempo_inicio_anime = time.time() # Guardamos la hora actual como inicio
+                    
+                    # Actualizamos Discord si cambió el título O si toca latido
+                    if titulo_limpio != ultimo_titulo or (tiempo_actual - ultima_actualizacion > TOLERANCIA_LATIDO):
                         try:
-                            # Generar URL del botón
-                            url_busqueda = f"https://www.google.com/search?q={urllib.parse.quote(titulo_limpio)}+anime"
-
                             RPC.update(
-                                activity_type=ActivityType.WATCHING, # Icono de TV
-                                details=titulo_limpio, # Solo el nombre limpio
-                                state=None, # Dejamos la línea de abajo vacía
+                                activity_type=ActivityType.WATCHING,
+                                details=titulo_limpio,
+                                state=None,
                                 large_image="stremio_logo", 
                                 large_text="Stremio",
-                                buttons=[{"label": "Buscar Anime 🔎", "url": url_busqueda}]
+                                # AQUÍ AGREGAMOS EL RELOJ
+                                start=tiempo_inicio_anime 
                             )
                             
                             ultimo_titulo = titulo_limpio
@@ -111,7 +113,7 @@ while True:
                         except:
                             RPC = conectar_discord()
             else:
-                pass # Mantenemos estado (Cache-Proof)
+                pass 
         else:
             if ultimo_titulo != "":
                 try:
@@ -122,6 +124,6 @@ while True:
 
     except Exception as e:
         log(f"Error: {e}")
-        time.sleep(5)
+        time.sleep(UPDATE_INTERVAL)
 
-    time.sleep(5)
+    time.sleep(UPDATE_INTERVAL)

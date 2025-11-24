@@ -1,0 +1,24 @@
+{
+    "client_id": "1441601634374385696",
+    "update_interval": 5,
+    "tolerance_seconds": 60,
+    "blacklisted_words": [
+        "1080p",
+        "720p",
+        "480p",
+        "4k",
+        "2160p",
+        "hdrip",
+        "web-dl",
+        "bluray",
+        "x265",
+        "hevc",
+        "aac",
+        "h264",
+        "webrip",
+        "dual audio",
+        "10bit",
+        "anime time",
+        "eng sub"
+    ]
+}
