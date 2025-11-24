@@ -33,6 +33,16 @@ except:
     TOLERANCIA_LATIDO = 60
     PATH_LOG = "stremio_log.txt"
 
+# --- LIMPIEZA AUTOMÁTICA DE LOGS (NUEVO V26) ---
+try:
+    # Si el archivo existe y pesa más de 1 MB (1024*1024 bytes)
+    if os.path.exists(PATH_LOG) and os.path.getsize(PATH_LOG) > 1 * 1024 * 1024:
+        # Lo abrimos en modo 'w' (write) para borrar todo su contenido
+        with open(PATH_LOG, "w", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] 🧹 Log limpiado automáticamente (Superó 1MB).\n")
+except:
+    pass
+
 def log(mensaje):
     texto = f"[{time.strftime('%H:%M:%S')}] {mensaje}"
     try:
@@ -65,11 +75,11 @@ def limpiar_nombre(nombre_crudo):
     return nombre_limpio
 
 # --- INICIO ---
-log("🚀 Script V25.0 (Session Timer) Iniciado...")
+log("🚀 Script V26.0 (Log Rotation) Iniciado...")
 RPC = conectar_discord()
 ultimo_titulo = ""
 ultima_actualizacion = 0
-tiempo_inicio_anime = None # Variable para guardar cuándo empezó el capítulo
+tiempo_inicio_anime = None
 
 while True:
     try:
@@ -90,11 +100,9 @@ while True:
                     titulo_limpio = limpiar_nombre(nombre_crudo)
                     tiempo_actual = time.time()
                     
-                    # SI CAMBIÓ EL ANIME: Reseteamos el reloj
                     if titulo_limpio != ultimo_titulo:
-                        tiempo_inicio_anime = time.time() # Guardamos la hora actual como inicio
+                        tiempo_inicio_anime = time.time()
                     
-                    # Actualizamos Discord si cambió el título O si toca latido
                     if titulo_limpio != ultimo_titulo or (tiempo_actual - ultima_actualizacion > TOLERANCIA_LATIDO):
                         try:
                             RPC.update(
@@ -103,7 +111,6 @@ while True:
                                 state=None,
                                 large_image="stremio_logo", 
                                 large_text="Stremio",
-                                # AQUÍ AGREGAMOS EL RELOJ
                                 start=tiempo_inicio_anime 
                             )
                             
