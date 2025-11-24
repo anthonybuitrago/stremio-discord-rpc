@@ -5,6 +5,9 @@ import re
 import sys
 import os
 import json
+import threading
+from pystray import Icon, MenuItem, Menu
+from PIL import Image
 
 # ---------------------------------------------------------
 # TU ID AQUÍ
@@ -12,12 +15,23 @@ import json
 client_id = "1441601634374385696"
 # ---------------------------------------------------------
 
+APP_RUNNING = True 
+
+# --- DETECCIÓN DE RUTA INTELIGENTE (EXE vs SCRIPT) ---
+if getattr(sys, 'frozen', False):
+    # Si estamos corriendo como .exe
+    CARPETA_SCRIPT = os.path.dirname(sys.executable)
+else:
+    # Si estamos corriendo como .pyw
+    CARPETA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
+
+# Rutas de archivos
+PATH_CONFIG = os.path.join(CARPETA_SCRIPT, "config.json")
+PATH_LOG = os.path.join(CARPETA_SCRIPT, "stremio_log.txt")
+PATH_ICON = os.path.join(CARPETA_SCRIPT, "rpc.ico")
+
 # --- CARGAR CONFIGURACIÓN ---
 try:
-    CARPETA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
-    PATH_CONFIG = os.path.join(CARPETA_SCRIPT, "config.json")
-    PATH_LOG = os.path.join(CARPETA_SCRIPT, "stremio_log.txt")
-    
     with open(PATH_CONFIG, "r", encoding="utf-8") as f:
         config = json.load(f)
         
@@ -31,17 +45,13 @@ except:
     UPDATE_INTERVAL = 5
     PALABRAS_BASURA = []
     TOLERANCIA_LATIDO = 60
-    PATH_LOG = "stremio_log.txt"
 
-# --- LIMPIEZA AUTOMÁTICA DE LOGS (NUEVO V26) ---
+# --- LIMPIEZA DE LOGS ---
 try:
-    # Si el archivo existe y pesa más de 1 MB (1024*1024 bytes)
     if os.path.exists(PATH_LOG) and os.path.getsize(PATH_LOG) > 1 * 1024 * 1024:
-        # Lo abrimos en modo 'w' (write) para borrar todo su contenido
         with open(PATH_LOG, "w", encoding="utf-8") as f:
-            f.write(f"[{time.strftime('%H:%M:%S')}] 🧹 Log limpiado automáticamente (Superó 1MB).\n")
-except:
-    pass
+            f.write(f"[{time.strftime('%H:%M:%S')}] 🧹 Log limpiado automáticamente.\n")
+except: pass
 
 def log(mensaje):
     texto = f"[{time.strftime('%H:%M:%S')}] {mensaje}"
@@ -53,7 +63,7 @@ def log(mensaje):
 
 def conectar_discord():
     rpc = None
-    while rpc is None:
+    while rpc is None and APP_RUNNING:
         try:
             log("Conectando a Discord...")
             rpc = Presence(CLIENT_ID)
@@ -74,63 +84,97 @@ def limpiar_nombre(nombre_crudo):
     if not nombre_limpio: nombre_limpio = "Stremio"
     return nombre_limpio
 
-# --- INICIO ---
-log("🚀 Script V26.0 (Log Rotation) Iniciado...")
-RPC = conectar_discord()
-ultimo_titulo = ""
-ultima_actualizacion = 0
-tiempo_inicio_anime = None
+def bucle_principal():
+    global APP_RUNNING
+    log("🚀 Hilo de Stremio iniciado...")
+    RPC = conectar_discord()
+    ultimo_titulo = ""
+    ultima_actualizacion = 0
+    tiempo_inicio_anime = None
 
-while True:
-    try:
+    while APP_RUNNING:
         try:
-            response = requests.get("http://127.0.0.1:11470/stats.json", timeout=3)
-            stremio_conectado = True
-        except:
-            stremio_conectado = False
+            try:
+                response = requests.get("http://127.0.0.1:11470/stats.json", timeout=3)
+                stremio_conectado = True
+            except:
+                stremio_conectado = False
 
-        if stremio_conectado and response.status_code == 200:
-            data = response.json()
-            
-            if len(data) > 0:
-                video_actual = list(data.values())[-1]
-                nombre_crudo = str(video_actual.get('name', ''))
+            if stremio_conectado and response.status_code == 200:
+                data = response.json()
                 
-                if nombre_crudo:
-                    titulo_limpio = limpiar_nombre(nombre_crudo)
-                    tiempo_actual = time.time()
+                if len(data) > 0:
+                    video_actual = list(data.values())[-1]
+                    nombre_crudo = str(video_actual.get('name', ''))
                     
-                    if titulo_limpio != ultimo_titulo:
-                        tiempo_inicio_anime = time.time()
-                    
-                    if titulo_limpio != ultimo_titulo or (tiempo_actual - ultima_actualizacion > TOLERANCIA_LATIDO):
-                        try:
-                            RPC.update(
-                                activity_type=ActivityType.WATCHING,
-                                details=titulo_limpio,
-                                state=None,
-                                large_image="stremio_logo", 
-                                large_text="Stremio",
-                                start=tiempo_inicio_anime 
-                            )
-                            
-                            ultimo_titulo = titulo_limpio
-                            ultima_actualizacion = tiempo_actual
-                            log(f"Actualizado: {titulo_limpio}")
-                        except:
-                            RPC = conectar_discord()
+                    if nombre_crudo:
+                        titulo_limpio = limpiar_nombre(nombre_crudo)
+                        tiempo_actual = time.time()
+                        
+                        if titulo_limpio != ultimo_titulo:
+                            tiempo_inicio_anime = time.time()
+                        
+                        if titulo_limpio != ultimo_titulo or (tiempo_actual - ultima_actualizacion > TOLERANCIA_LATIDO):
+                            try:
+                                RPC.update(
+                                    activity_type=ActivityType.WATCHING,
+                                    details=titulo_limpio,
+                                    state=None,
+                                    large_image="stremio_logo", 
+                                    large_text="Stremio",
+                                    start=tiempo_inicio_anime 
+                                )
+                                ultimo_titulo = titulo_limpio
+                                ultima_actualizacion = tiempo_actual
+                                log(f"Actualizado: {titulo_limpio}")
+                            except:
+                                RPC = conectar_discord()
+                else:
+                    pass 
             else:
-                pass 
-        else:
-            if ultimo_titulo != "":
-                try:
-                    RPC.clear()
-                    ultimo_titulo = ""
-                    log("❌ Stremio cerrado.")
-                except: pass
+                if ultimo_titulo != "":
+                    try:
+                        RPC.clear()
+                        ultimo_titulo = ""
+                        log("❌ Stremio cerrado.")
+                    except: pass
 
-    except Exception as e:
-        log(f"Error: {e}")
+        except Exception as e:
+            log(f"Error: {e}")
+            time.sleep(UPDATE_INTERVAL)
+
         time.sleep(UPDATE_INTERVAL)
+    
+    try: RPC.close()
+    except: pass
+    log("👋 Hilo de Stremio finalizado.")
 
-    time.sleep(UPDATE_INTERVAL)
+def salir_app(icon, item):
+    global APP_RUNNING
+    log("🛑 Cerrando aplicación...")
+    APP_RUNNING = False
+    icon.stop()
+
+def abrir_log(icon, item):
+    os.startfile(PATH_LOG)
+
+if __name__ == '__main__':
+    log("🏁 Iniciando V28.0 (Exe Ready)...")
+    
+    hilo_stremio = threading.Thread(target=bucle_principal)
+    hilo_stremio.daemon = True
+    hilo_stremio.start()
+
+    try:
+        # Intentamos cargar el icono, si falla (ej: compilación), usamos uno genérico o nada
+        if os.path.exists(PATH_ICON):
+            image = Image.open(PATH_ICON)
+            menu = Menu(MenuItem('Ver Logs 📄', abrir_log), MenuItem('Salir ❌', salir_app))
+            icon = Icon("StremioRPC", image, "Stremio RPC", menu)
+            icon.run()
+        else:
+            log("⚠️ No se encontró el icono. Corriendo en modo fantasma.")
+            while APP_RUNNING: time.sleep(1)
+    except Exception as e:
+        log(f"🔥 Error visual: {e}")
+        while APP_RUNNING: time.sleep(1)
