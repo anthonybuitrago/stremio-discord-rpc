@@ -23,12 +23,8 @@ def gestionar_logs():
                 f.write(f"[{time.strftime('%H:%M:%S')}] 🧹 Log limpiado automáticamente.\n")
     except: pass
 
-# --- LIMPIEZA DE NOMBRE (SMART CUT V38.1) ---
+# --- LIMPIEZA DE NOMBRE (SMART CUT) ---
 def extraer_datos_video(nombre_crudo):
-    """
-    Devuelve una tupla: (nombre_limpio, tipo_detectado)
-    tipo_detectado puede ser: 'serie', 'peli', o 'auto'
-    """
     if not nombre_crudo or str(nombre_crudo).lower() == "none":
         return None, "auto"
 
@@ -36,32 +32,28 @@ def extraer_datos_video(nombre_crudo):
     nombre = re.sub(r'\[.*?\]', '', nombre)
     nombre = re.sub(r'\(.*?\)', '', nombre)
     
-    tipo_detectado = "auto" # Por defecto no sabemos
+    tipo_detectado = "auto" 
 
-    # 1. BUSCAR EPISODIO (PRIORIDAD MÁXIMA)
-    # S01E01, 1x01, o " - 01 " (típico anime)
+    # 1. BUSCAR EPISODIO (S01E01, 1x01, - 01)
     match_episodio = re.search(r'( S\d+E\d+ | \d+x\d+ | [ \-_]0?(\d{1,4})(?:[ \-_\[\.]) )', nombre, re.IGNORECASE)
     
-    # 2. BUSCAR SOLO TEMPORADA (NUEVO: "S01" sin episodio)
+    # 2. BUSCAR SOLO TEMPORADA (S01)
     match_temporada = re.search(r'( S\d{1,2} | Season \d{1,2} )', nombre, re.IGNORECASE)
 
     # 3. BUSCAR AÑO
     match_anio = re.search(r'\b(19\d{2}|20\d{2})\b', nombre)
 
     if match_episodio:
-        # Si tiene episodio, ES SERIE
         tipo_detectado = "serie"
         indice = match_episodio.start()
         nombre = nombre[:indice]
         
     elif match_temporada:
-        # Si tiene "S01" pero no episodio, ES SERIE (Fix Made in Abyss)
         tipo_detectado = "serie"
         indice = match_temporada.start()
         nombre = nombre[:indice]
 
     elif match_anio:
-        # Si tiene año Y NO TIENE NADA DE ARRIBA, es Peli
         tipo_detectado = "peli"
         indice = match_anio.end()
         nombre = nombre[:indice]
@@ -90,7 +82,9 @@ def extraer_minutos(texto_runtime):
     except: pass
     return 0
 
+# --- BÚSQUEDA API MEJORADA (V39.0) ---
 def obtener_metadatos(nombre_busqueda, tipo_forzado="auto"):
+    # Inicializamos con los datos locales como respaldo seguro
     datos = {"poster": "stremio_logo", "runtime": 0, "name": nombre_busqueda}
     
     if not nombre_busqueda or nombre_busqueda == "Stremio" or nombre_busqueda == "None": 
@@ -99,34 +93,48 @@ def obtener_metadatos(nombre_busqueda, tipo_forzado="auto"):
     try:
         query = urllib.parse.quote(nombre_busqueda)
         
-        # FUNCIÓN AUXILIAR PARA BUSCAR
         def buscar_en(tipo_api):
             url = f"https://v3-cinemeta.strem.io/catalog/{tipo_api}/top/search={query}.json"
             resp = requests.get(url, timeout=2)
             data = resp.json()
+            
             if 'metas' in data and len(data['metas']) > 0:
                 item = data['metas'][0]
-                datos["poster"] = item.get('poster', 'stremio_logo')
+                
+                # 1. CONTROL DE CALIDAD: NOMBRE
+                # Si la API devuelve nombre vacío, mantenemos el nuestro
+                api_name = item.get('name')
+                if api_name:
+                    datos["name"] = api_name
+                
+                # 2. CONTROL DE CALIDAD: POSTER
+                # Si el poster está roto, usamos el logo
+                poster = item.get('poster')
+                if poster and "http" in poster:
+                    datos["poster"] = poster
+                else:
+                    datos["poster"] = "stremio_logo"
+                
+                # 3. DURACIÓN
                 datos["runtime"] = extraer_minutos(item.get('runtime', 0))
-                datos["name"] = item.get('name', nombre_busqueda)
                 return True
             return False
 
-        # LÓGICA DE PRIORIDAD
+        # LÓGICA DE PRIORIDAD MODIFICADA
         if tipo_forzado == "serie":
-            # Si sabemos que es serie, buscamos SOLO series primero
             if buscar_en("series"): return datos
-            if buscar_en("movie"): return datos # Respaldo
+            if buscar_en("movie"): return datos 
             
         elif tipo_forzado == "peli":
-            # Si sabemos que es peli
             if buscar_en("movie"): return datos
             if buscar_en("series"): return datos
             
         else:
-            # Si no sabemos (auto), probamos los dos
-            if buscar_en("movie"): return datos
+            # MODO AUTO: CAMBIO IMPORTANTE AQUÍ
+            # Antes buscábamos peli primero. AHORA SERIE PRIMERO.
+            # Esto arregla Haikyuu!!
             if buscar_en("series"): return datos
+            if buscar_en("movie"): return datos
 
     except Exception as e:
         log(f"⚠️ Error Metadata: {e}")
@@ -142,12 +150,10 @@ def check_autostart():
 
 def toggle_autostart(icon, item):
     link_path = get_startup_path()
-    
     if getattr(sys, 'frozen', False):
         target = sys.executable
     else:
         target = os.path.abspath(sys.argv[0])
-        
     work_dir = os.path.dirname(target)
 
     if os.path.exists(link_path):

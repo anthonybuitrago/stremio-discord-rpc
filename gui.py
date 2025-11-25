@@ -1,9 +1,9 @@
 import customtkinter as ctk
 import config_manager
+import utils
 import os
-import ctypes # <--- NECESARIO PARA EL ICONO EN LA BARRA DE TAREAS
+import ctypes
 
-# Configuración visual global
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
@@ -11,115 +11,113 @@ class ConfigWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # --- TRUCO PARA EL ICONO EN LA BARRA DE TAREAS ---
-        # Esto le dice a Windows que somos una App propia, no "Python genérico"
         try:
-            myappid = 'anthony.stremio.rpc.v1' # Identificador único arbitrario
+            myappid = 'anthony.stremio.rpc.v5'
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         except: pass
 
-        # --- CARGAR CONFIGURACIÓN ---
         self.current_config = config_manager.cargar_config()
 
-        # 1. CONFIGURACIÓN DE LA VENTANA
         self.title("Configuración - Stremio RPC")
-        self.geometry("500x600")
+        self.geometry("400x500")
         self.resizable(False, False)
 
-        # --- ASIGNAR ICONO ---
         if os.path.exists(config_manager.PATH_ICON):
             try:
                 self.iconbitmap(config_manager.PATH_ICON)
-                # Forzamos actualización del icono
                 self.after(200, lambda: self.iconbitmap(config_manager.PATH_ICON)) 
             except: pass
 
-        # --- CONFIGURAR BOTÓN DE CERRAR (X) ---
         self.protocol("WM_DELETE_WINDOW", self.cerrar_ventana)
-
-        # --- FORZAR FOCO (SOLUCIÓN "NO SE SUPERPONE") ---
-        self.attributes("-topmost", True) # Poner siempre encima
-        self.lift()                       # Levantar ventana
-        self.focus_force()                # Forzar foco del teclado
-        
-        # Quitamos el "siempre encima" después de medio segundo para que no moleste
+        self.attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
         self.after(500, lambda: self.attributes("-topmost", False))
 
-        # --- INTERFAZ ---
-        
-        # Título
-        self.label_title = ctk.CTkLabel(self, text="Ajustes de Stremio RPC", font=("Roboto", 24, "bold"))
+        # --- UI ---
+        self.label_title = ctk.CTkLabel(self, text="Ajustes de Stremio RPC", font=("Roboto", 22, "bold"))
         self.label_title.pack(pady=20)
 
-        # Campo: Client ID
+        # ID
         self.lbl_id = ctk.CTkLabel(self, text="Discord Client ID:")
-        self.lbl_id.pack(anchor="w", padx=20)
-        self.entry_id = ctk.CTkEntry(self, placeholder_text="Ingresa tu ID", width=460)
+        self.lbl_id.pack(anchor="w", padx=30)
+        self.entry_id = ctk.CTkEntry(self, placeholder_text="Ingresa tu ID", width=340)
         self.entry_id.insert(0, self.current_config.get("client_id", ""))
-        self.entry_id.pack(pady=(0, 10))
+        self.entry_id.pack(pady=(0, 15))
 
-        # Campo: Intervalo
+        # Intervalo
         self.lbl_interval = ctk.CTkLabel(self, text=f"Velocidad de Actualización: {self.current_config.get('update_interval')} seg")
-        self.lbl_interval.pack(anchor="w", padx=20)
-        
-        self.slider_interval = ctk.CTkSlider(self, from_=2, to=30, number_of_steps=28, command=self.update_slider_label)
+        self.lbl_interval.pack(anchor="w", padx=30)
+        self.slider_interval = ctk.CTkSlider(self, from_=2, to=30, number_of_steps=28, command=self.update_slider)
         self.slider_interval.set(self.current_config.get("update_interval", 5))
-        self.slider_interval.pack(fill="x", padx=20, pady=(0, 10))
+        self.slider_interval.pack(fill="x", padx=30, pady=(0, 20))
 
-        # Campo: Botón
+        # MODO DE TIEMPO
+        self.lbl_time = ctk.CTkLabel(self, text="Estilo de Tiempo:", font=("Roboto", 14, "bold"))
+        self.lbl_time.pack(anchor="w", padx=30)
+        
+        self.time_mode_var = ctk.StringVar(value="Auto")
+        current_fixed = self.current_config.get("fixed_duration_minutes", 0)
+        if current_fixed == 24: self.time_mode_var.set("Anime")
+        elif current_fixed == 0: self.time_mode_var.set("Auto")
+        
+        self.radio_auto = ctk.CTkRadioButton(self, text="Automático (API / Real)", variable=self.time_mode_var, value="Auto")
+        self.radio_auto.pack(anchor="w", padx=30, pady=5)
+        
+        self.radio_anime = ctk.CTkRadioButton(self, text="Forzar Anime (24 min)", variable=self.time_mode_var, value="Anime")
+        self.radio_anime.pack(anchor="w", padx=30, pady=5)
+
+        # OPCIONES SISTEMA
+        self.lbl_sys = ctk.CTkLabel(self, text="Opciones de Sistema:", font=("Roboto", 14, "bold"))
+        self.lbl_sys.pack(anchor="w", padx=30, pady=(20, 5))
+
+        # Switch: Botón
         self.switch_btn = ctk.CTkSwitch(self, text="Mostrar Botón 'Buscar Anime'")
         if self.current_config.get("show_search_button", True):
             self.switch_btn.select()
-        self.switch_btn.pack(anchor="w", padx=20, pady=10)
+        self.switch_btn.pack(anchor="w", padx=30, pady=5)
 
-        # Campo: Lista Negra
-        self.lbl_blacklist = ctk.CTkLabel(self, text="Lista Negra (Palabras a borrar, separadas por coma):")
-        self.lbl_blacklist.pack(anchor="w", padx=20, pady=(10, 0))
-        
-        self.txt_blacklist = ctk.CTkTextbox(self, height=150, width=460)
-        lista_texto = ", ".join(self.current_config.get("blacklisted_words", []))
-        self.txt_blacklist.insert("0.0", lista_texto)
-        self.txt_blacklist.pack(pady=(5, 20))
+        # Switch: Auto-Start (Lee el estado real de Windows)
+        self.switch_autostart = ctk.CTkSwitch(self, text="Iniciar con Windows")
+        if utils.check_autostart():
+            self.switch_autostart.select()
+        self.switch_autostart.pack(anchor="w", padx=30, pady=5)
 
         # Botón Guardar
-        self.btn_save = ctk.CTkButton(self, text="GUARDAR Y CERRAR", command=self.guardar_datos, height=40, font=("Roboto", 14, "bold"))
-        self.btn_save.pack(fill="x", padx=20, pady=10)
+        self.btn_save = ctk.CTkButton(self, text="GUARDAR CAMBIOS", command=self.guardar_datos, height=40, font=("Roboto", 14, "bold"), fg_color="green", hover_color="darkgreen")
+        self.btn_save.pack(fill="x", padx=30, pady=(30, 10))
 
-    def update_slider_label(self, value):
+    def update_slider(self, value):
         self.lbl_interval.configure(text=f"Velocidad de Actualización: {int(value)} seg")
 
     def guardar_datos(self):
-        # Recolectar datos
-        new_id = self.entry_id.get().strip()
-        new_interval = int(self.slider_interval.get())
-        show_btn = bool(self.switch_btn.get())
-        
-        raw_text = self.txt_blacklist.get("0.0", "end").replace("\n", "")
-        new_blacklist = [palabra.strip() for palabra in raw_text.split(",") if palabra.strip()]
+        # Procesar Modo de Tiempo
+        modo = self.time_mode_var.get()
+        fixed_minutes = 24 if modo == "Anime" else 0
 
         # Crear diccionario
         datos_nuevos = self.current_config.copy()
-        datos_nuevos["client_id"] = new_id
-        datos_nuevos["update_interval"] = new_interval
-        datos_nuevos["show_search_button"] = show_btn
-        datos_nuevos["blacklisted_words"] = new_blacklist
-
-        # Guardar
-        config_manager.guardar_config(datos_nuevos)
-        print("Configuración guardada.")
+        datos_nuevos["client_id"] = self.entry_id.get().strip()
+        datos_nuevos["update_interval"] = int(self.slider_interval.get())
+        datos_nuevos["show_search_button"] = bool(self.switch_btn.get())
+        datos_nuevos["fixed_duration_minutes"] = fixed_minutes
         
-        # Cerrar Inmediato
+        # Guardar JSON
+        config_manager.guardar_config(datos_nuevos)
+        
+        # Aplicar Auto-Start real
+        deseo_autostart = bool(self.switch_autostart.get())
+        utils.set_autostart(deseo_autostart)
+
+        print("Configuración guardada.")
         self.cerrar_ventana()
 
     def cerrar_ventana(self):
-        # Destruimos visualmente primero (Sensación de rapidez)
         self.destroy()
-        # Luego matamos el loop
         self.quit()
 
 def abrir_ventana():
     app = ConfigWindow()
-    # Forzamos el foco otra vez al iniciar el loop
     app.after(100, app.focus_force)
     app.mainloop()
 

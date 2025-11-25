@@ -2,6 +2,8 @@
     "client_id": "1441601634374385696",
     "update_interval": 5,
     "tolerance_seconds": 60,
+    "show_search_button": true,
+    "fixed_duration_minutes": 0,
     "blacklisted_words": [
         "1080p",
         "720p",
@@ -53,7 +55,5 @@
         "temporada",
         "subtitulado",
         "DDP5.1"
-    ],
-    "fixed_duration_minutes": 0,
-    "show_search_button": false
+    ]
 }

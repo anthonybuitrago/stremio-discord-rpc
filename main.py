@@ -29,7 +29,7 @@ def conectar_discord():
 
 def bucle_logica():
     global APP_RUNNING
-    utils.log("🚀 Hilo V38.0 (Anime Fix) Iniciado.")
+    utils.log("🚀 Hilo Principal V5.0 (Button Fix) Iniciado.")
     
     RPC = conectar_discord()
     ultimo_titulo = ""
@@ -56,7 +56,6 @@ def bucle_logica():
                     nombre_crudo = str(video.get('name', ''))
                     
                     if nombre_crudo:
-                        # V38: Recibimos nombre Y tipo
                         nombre_semilla, tipo_video = utils.extraer_datos_video(nombre_crudo)
                         tiempo_actual = time.time()
                         
@@ -73,13 +72,11 @@ def bucle_logica():
                         except:
                             stats_text = "Stremio RPC"
 
-                        # Cambio de Video
                         if nombre_semilla != ultimo_titulo:
                             tiempo_inicio = time.time()
                             ultimo_titulo = nombre_semilla
                             
-                            # V38: Le pasamos el tipo a la API para que busque mejor
-                            utils.log(f"🔎 API: {nombre_semilla} (Tipo: {tipo_video})")
+                            utils.log(f"🔎 API: {nombre_semilla} ({tipo_video})")
                             meta = utils.obtener_metadatos(nombre_semilla, tipo_video)
                             
                             poster_actual = meta["poster"]
@@ -93,10 +90,14 @@ def bucle_logica():
                             else:
                                 tiempo_fin = None
 
-                        # Update Discord
                         if tiempo_actual - ultima_actualizacion > 15:
                             try:
-                                url_btn = f"https://www.google.com/search?q={urllib.parse.quote(titulo_oficial)}+anime"
+                                # --- FIX DEL BOTÓN FANTASMA ---
+                                lista_botones = None
+                                if CONFIG.get("show_search_button", True): # Verificamos config
+                                    url_btn = f"https://www.google.com/search?q={urllib.parse.quote(titulo_oficial)}+anime"
+                                    lista_botones = [{"label": "Buscar Anime 🔎", "url": url_btn}]
+
                                 RPC.update(
                                     activity_type=ActivityType.WATCHING,
                                     details=titulo_oficial,
@@ -105,20 +106,19 @@ def bucle_logica():
                                     large_text=stats_text,
                                     start=tiempo_inicio,
                                     end=tiempo_fin,
-                                    buttons=[{"label": "Buscar Anime 🔎", "url": url_btn}]
+                                    buttons=lista_botones # Pasamos la lista (o None)
                                 )
                                 ultima_actualizacion = tiempo_actual
                             except:
                                 RPC = conectar_discord()
                 else:
                     pass
-
             else:
                 if ultimo_titulo != "":
                     try:
                         RPC.clear()
                         ultimo_titulo = ""
-                        utils.log("❌ Stremio cerrado. Estado limpiado.")
+                        utils.log("❌ Stremio cerrado.")
                     except: pass
 
         except Exception as e:
@@ -130,7 +130,6 @@ def bucle_logica():
     try: RPC.close() 
     except: pass
 
-# --- GUI ---
 def salir(icon, item):
     global APP_RUNNING
     APP_RUNNING = False
