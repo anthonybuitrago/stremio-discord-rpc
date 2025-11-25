@@ -149,23 +149,58 @@ def check_autostart():
     return os.path.exists(get_startup_path())
 
 def toggle_autostart(icon, item):
+    """
+    [MODIFICADO] Crea o elimina el acceso directo.
+    Ahora soporta pythonw.exe para evitar ventanas negras en modo desarrollo.
+    """
     link_path = get_startup_path()
+    
+    # Lógica para definir Target y Argumentos
+    arguments = "" # Por defecto vacío
+    
     if getattr(sys, 'frozen', False):
+        # MODO EXE: El target es el propio ejecutable
         target = sys.executable
+        work_dir = os.path.dirname(target)
     else:
-        target = os.path.abspath(sys.argv[0])
-    work_dir = os.path.dirname(target)
+        # MODO SCRIPT: Usamos pythonw.exe y pasamos el script como argumento
+        current_python_dir = os.path.dirname(sys.executable)
+        pythonw = os.path.join(current_python_dir, 'pythonw.exe')
+        
+        target = pythonw
+        # Comillas para evitar errores con espacios en rutas
+        script_path = os.path.abspath(sys.argv[0])
+        arguments = f'"{script_path}"'
+        work_dir = os.path.dirname(script_path)
 
+    # Si ya existe, lo borramos (Toggle OFF)
     if os.path.exists(link_path):
         try:
             os.remove(link_path)
             log("🗑️ Auto-start desactivado.")
+            # Opcional: Notificar al usuario visualmente si fuera posible
         except Exception as e:
             log(f"Error borrando link: {e}")
+    
+    # Si no existe, lo creamos (Toggle ON)
     else:
         try:
-            ps_script = f"$s=(New-Object -COM WScript.Shell).CreateShortcut('{link_path}');$s.TargetPath='{target}';$s.WorkingDirectory='{work_dir}';$s.Save()"
-            subprocess.run(["powershell", "-Command", ps_script], creationflags=0x08000000)
-            log("✅ Auto-start activado.")
+            # [MODIFICADO] Script PowerShell ahora incluye .Arguments y .WindowStyle
+            ps_script = f"""
+            $ws = New-Object -ComObject WScript.Shell;
+            $s = $ws.CreateShortcut('{link_path}');
+            $s.TargetPath = '{target}';
+            $s.Arguments = '{arguments}';
+            $s.WorkingDirectory = '{work_dir}';
+            $s.WindowStyle = 7;
+            $s.Save()
+            """
+            # WindowStyle 7 = Minimizada (por seguridad)
+            
+            subprocess.run(
+                ["powershell", "-Command", ps_script], 
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+            )
+            log("✅ Auto-start activado (Modo Silencioso).")
         except Exception as e:
             log(f"Error creando link: {e}")
