@@ -1,6 +1,26 @@
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
 *.spec
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Logs
+*.log
+stremio_log.txt
+
+# Distribution
 build/
 dist/
-stremio_log.txt
+*.exe
+
+# IDEs
+.vscode/
+.idea/
 *.user
