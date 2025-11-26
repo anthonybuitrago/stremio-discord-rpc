@@ -282,3 +282,20 @@ def set_autostart(enable: bool):
     elif not enable and currently_enabled:
         # Queremos desactivar y está activado -> Llamamos a toggle (que lo borrará)
         toggle_autostart(None, None)
+
+def is_process_running(process_name):
+    """Verifica si un proceso está corriendo en Windows usando tasklist."""
+    try:
+        # Usamos tasklist para buscar el proceso
+        # /FI "IMAGENAME eq process_name" filtra por nombre
+        # /NH quita el header para facilitar el parsing (aunque aquí solo miramos si hay output)
+        output = subprocess.check_output(
+            f'tasklist /FI "IMAGENAME eq {process_name}" /NH', 
+            shell=True
+        ).decode('utf-8', errors='ignore')
+        
+        # Si el proceso está corriendo, tasklist devuelve una línea con el nombre.
+        # Si no, devuelve "INFO: No tasks are running..."
+        return process_name.lower() in output.lower()
+    except Exception:
+        return False

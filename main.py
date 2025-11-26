@@ -139,9 +139,16 @@ class StremioRPCClient:
         """Limpia la presencia si Stremio se detuvo."""
         if self.last_title != "":
             try:
+                # [MODIFICADO] Antes de limpiar, verificamos si el proceso sigue vivo.
+                # Si el proceso sigue vivo, es probable que solo sea un fallo de API o Pausa.
+                # En ese caso, NO limpiamos para mantener el estado (o evitar parpadeos).
+                if utils.is_process_running("stremio.exe"):
+                    logging.info("⚠️ API desconectada pero Stremio sigue abierto. Manteniendo RPC.")
+                    return
+
                 self.rpc.clear()
                 self.last_title = ""
-                logging.info("❌ Stremio cerrado/pausado.")
+                logging.info("❌ Stremio cerrado.")
             except Exception: pass
 
     def run_logic(self):
