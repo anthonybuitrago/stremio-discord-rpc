@@ -76,16 +76,17 @@ class StremioRPCClient:
         return False, {}
 
     def _process_video_stats(self, video):
-        """Calcula estadísticas de descarga y velocidad."""
+        """Calcula estadísticas de descarga."""
         try:
             total = video.get('length', 0)
             if total == 0 and 'files' in video:
                 for f in video['files']:
                     if f.get('length', 0) > total: total = f.get('length', 0)
+            
             downloaded = video.get('downloaded', 0)
-            speed = video.get('downSpeed', 0)
             percentage = int((downloaded/total)*100) if total > 0 else 0
-            return f"⬇️ {utils.formato_velocidad(speed)} | 💾 {percentage}%"
+            
+            return f"💾 {percentage}%"
         except Exception:
             return "Stremio RPC"
 
