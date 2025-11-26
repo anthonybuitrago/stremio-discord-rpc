@@ -140,9 +140,10 @@ class StremioRPCClient:
         if self.last_title != "":
             try:
                 # [MODIFICADO] Antes de limpiar, verificamos si el proceso sigue vivo.
-                # Si el proceso sigue vivo, es probable que solo sea un fallo de API o Pausa.
-                # En ese caso, NO limpiamos para mantener el estado (o evitar parpadeos).
-                if utils.is_process_running("stremio.exe"):
+                # Verificamos múltiples nombres de proceso para cubrir diferentes versiones.
+                if (utils.is_process_running("stremio.exe") or 
+                    utils.is_process_running("stremio-runtime.exe") or 
+                    utils.is_process_running("stremio-shell-ng.exe")):
                     logging.info("⚠️ API desconectada pero Stremio sigue abierto. Manteniendo RPC.")
                     return
 
