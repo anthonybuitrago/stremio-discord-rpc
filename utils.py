@@ -82,6 +82,33 @@ def extraer_minutos(texto_runtime):
     except: pass
     return 0
 
+def limpiar_titulo_api(api_name, nombre_original):
+    """
+    Limpia títulos dobles tipo 'English: Japanese' o 'Title: Subtitle'.
+    Intenta quedarse con la parte más parecida al nombre original.
+    """
+    if not api_name: return api_name
+    
+    # Si no hay separador común, devolver tal cual
+    if ": " not in api_name:
+        return api_name
+        
+    partes = api_name.split(": ")
+    
+    # Si el nombre original está contenido en alguna de las partes, usamos esa
+    nombre_orig_lower = nombre_original.lower().strip()
+    
+    for parte in partes:
+        if parte.lower().strip() in nombre_orig_lower or nombre_orig_lower in parte.lower().strip():
+            return parte
+            
+    # Heurística: Si el título es muy largo (>30) y tiene partes,
+    # probablemente la primera parte sea el título principal.
+    if len(api_name) > 30:
+        return partes[0]
+        
+    return api_name
+
 # --- BÚSQUEDA API MEJORADA (V39.0) ---
 def obtener_metadatos(nombre_busqueda, tipo_forzado="auto"):
     # Inicializamos con los datos locales como respaldo seguro
@@ -91,50 +118,62 @@ def obtener_metadatos(nombre_busqueda, tipo_forzado="auto"):
         return datos
     
     try:
-        query = urllib.parse.quote(nombre_busqueda)
-        
-        def buscar_en(tipo_api):
-            url = f"https://v3-cinemeta.strem.io/catalog/{tipo_api}/top/search={query}.json"
-            resp = requests.get(url, timeout=2)
-            data = resp.json()
+        # Función interna para realizar la búsqueda
+        def ejecutar_busqueda(termino):
+            query = urllib.parse.quote(termino)
             
-            if 'metas' in data and len(data['metas']) > 0:
-                item = data['metas'][0]
-                
-                # 1. CONTROL DE CALIDAD: NOMBRE
-                # Si la API devuelve nombre vacío, mantenemos el nuestro
-                api_name = item.get('name')
-                if api_name:
-                    datos["name"] = api_name
-                
-                # 2. CONTROL DE CALIDAD: POSTER
-                # Si el poster está roto, usamos el logo
-                poster = item.get('poster')
-                if poster and "http" in poster:
-                    datos["poster"] = poster
-                else:
-                    datos["poster"] = "stremio_logo"
-                
-                # 3. DURACIÓN
-                datos["runtime"] = extraer_minutos(item.get('runtime', 0))
-                return True
+            def buscar_en(tipo_api):
+                url = f"https://v3-cinemeta.strem.io/catalog/{tipo_api}/top/search={query}.json"
+                try:
+                    resp = requests.get(url, timeout=5)
+                    data = resp.json()
+                    
+                    if 'metas' in data and len(data['metas']) > 0:
+                        item = data['metas'][0]
+                        
+                        # 1. NOMBRE (Con limpieza)
+                        api_name = item.get('name')
+                        if api_name:
+                            datos["name"] = limpiar_titulo_api(api_name, nombre_busqueda)
+                        
+                        # 2. POSTER
+                        poster = item.get('poster')
+                        if poster and "http" in poster:
+                            datos["poster"] = poster
+                        else:
+                            datos["poster"] = "stremio_logo"
+                        
+                        # 3. DURACIÓN
+                        datos["runtime"] = extraer_minutos(item.get('runtime', 0))
+                        return True
+                except: pass
+                return False
+
+            # LÓGICA DE PRIORIDAD
+            if tipo_forzado == "serie":
+                if buscar_en("series"): return True
+                if buscar_en("movie"): return True 
+            elif tipo_forzado == "peli":
+                if buscar_en("movie"): return True
+                if buscar_en("series"): return True
+            else:
+                if buscar_en("series"): return True
+                if buscar_en("movie"): return True
+            
             return False
 
-        # LÓGICA DE PRIORIDAD MODIFICADA
-        if tipo_forzado == "serie":
-            if buscar_en("series"): return datos
-            if buscar_en("movie"): return datos 
-            
-        elif tipo_forzado == "peli":
-            if buscar_en("movie"): return datos
-            if buscar_en("series"): return datos
-            
-        else:
-            # MODO AUTO: CAMBIO IMPORTANTE AQUÍ
-            # Antes buscábamos peli primero. AHORA SERIE PRIMERO.
-            # Esto arregla Haikyuu!!
-            if buscar_en("series"): return datos
-            if buscar_en("movie"): return datos
+        # INTENTO 1: Búsqueda exacta
+        encontrado = ejecutar_busqueda(nombre_busqueda)
+        
+        # INTENTO 2: Smart Retry (Sin año)
+        if not encontrado:
+            # Buscar patrón de año al final (ej: "Pelicula 2024")
+            match_anio = re.search(r'\s(19|20)\d{2}$', nombre_busqueda)
+            if match_anio:
+                nombre_sin_anio = nombre_busqueda[:match_anio.start()].strip()
+                if len(nombre_sin_anio) > 2:
+                    log(f"🔄 Reintentando sin año: {nombre_sin_anio}")
+                    ejecutar_busqueda(nombre_sin_anio)
 
     except Exception as e:
         log(f"⚠️ Error Metadata: {e}")
@@ -204,3 +243,18 @@ def toggle_autostart(icon, item):
             log("✅ Auto-start activado (Modo Silencioso).")
         except Exception as e:
             log(f"Error creando link: {e}")
+
+def set_autostart(enable: bool):
+    """
+    Fuerza el estado del auto-start basado en un booleano.
+    Usado por la GUI para aplicar cambios.
+    """
+    currently_enabled = check_autostart()
+    
+    if enable and not currently_enabled:
+        # Queremos activar y no está activado -> Llamamos a toggle (que lo creará)
+        # Pasamos None, None porque toggle espera (icon, item) pero no los usa para la lógica core
+        toggle_autostart(None, None)
+    elif not enable and currently_enabled:
+        # Queremos desactivar y está activado -> Llamamos a toggle (que lo borrará)
+        toggle_autostart(None, None)

@@ -2,6 +2,7 @@ import time
 import threading
 import requests
 import urllib.parse
+import logging
 from pypresence import Presence, ActivityType
 from pystray import Icon, MenuItem, Menu
 from PIL import Image
@@ -12,163 +13,184 @@ import config_manager
 import utils
 import gui
 
-APP_RUNNING = True
-CONFIG = config_manager.cargar_config()
+# --- CONFIGURACIÓN DE LOGGING ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    datefmt='%H:%M:%S',
+    handlers=[
+        logging.FileHandler(config_manager.PATH_LOG, encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
-def conectar_discord():
-    rpc = None
-    while rpc is None and APP_RUNNING:
-        try:
-            utils.log("Conectando a Discord...")
-            rpc = Presence(CONFIG["client_id"])
-            rpc.connect()
-            utils.log("✅ Conectado a Discord")
-        except:
-            time.sleep(10)
-    return rpc
-
-def bucle_logica():
-    global APP_RUNNING
-    utils.log("🚀 Hilo Principal V5.0 (Button Fix) Iniciado.")
-    
-    RPC = conectar_discord()
-    ultimo_titulo = ""
-    ultima_actualizacion = 0
-    tiempo_inicio = None
-    tiempo_fin = None
-    
-    poster_actual = "stremio_logo"
-    titulo_oficial = ""
-
-    while APP_RUNNING:
-        try:
-            try:
-                response = requests.get("http://127.0.0.1:11470/stats.json", timeout=3)
-                conectado = True
-            except:
-                conectado = False
-
-            if conectado and response.status_code == 200:
-                data = response.json()
-                
-                if len(data) > 0:
-                    video = list(data.values())[-1]
-                    nombre_crudo = str(video.get('name', ''))
-                    
-                    if nombre_crudo:
-                        nombre_semilla, tipo_video = utils.extraer_datos_video(nombre_crudo)
-                        tiempo_actual = time.time()
-                        
-                        # Stats
-                        try:
-                            total = video.get('length', 0)
-                            if total == 0 and 'files' in video:
-                                for f in video['files']:
-                                    if f.get('length', 0) > total: total = f.get('length', 0)
-                            bajado = video.get('downloaded', 0)
-                            velocidad = video.get('downSpeed', 0)
-                            porcentaje = int((bajado/total)*100) if total > 0 else 0
-                            stats_text = f"⬇️ {utils.formato_velocidad(velocidad)} | 💾 {porcentaje}%"
-                        except:
-                            stats_text = "Stremio RPC"
-
-                        if nombre_semilla != ultimo_titulo:
-                            tiempo_inicio = time.time()
-                            ultimo_titulo = nombre_semilla
-                            
-                            utils.log(f"🔎 API: {nombre_semilla} ({tipo_video})")
-                            meta = utils.obtener_metadatos(nombre_semilla, tipo_video)
-                            
-                            poster_actual = meta["poster"]
-                            titulo_oficial = meta["name"]
-                            
-                            runtime = meta["runtime"]
-                            if CONFIG["fixed_duration_minutes"] > 0:
-                                tiempo_fin = tiempo_inicio + (CONFIG["fixed_duration_minutes"] * 60)
-                            elif runtime > 0:
-                                tiempo_fin = tiempo_inicio + (runtime * 60)
-                            else:
-                                tiempo_fin = None
-
-                        if tiempo_actual - ultima_actualizacion > 15:
-                            try:
-                                # --- FIX DEL BOTÓN FANTASMA ---
-                                lista_botones = None
-                                if CONFIG.get("show_search_button", True): # Verificamos config
-                                    url_btn = f"https://www.google.com/search?q={urllib.parse.quote(titulo_oficial)}+anime"
-                                    lista_botones = [{"label": "Buscar Anime 🔎", "url": url_btn}]
-
-                                RPC.update(
-                                    activity_type=ActivityType.WATCHING,
-                                    details=titulo_oficial,
-                                    state=None,
-                                    large_image=poster_actual,
-                                    large_text=stats_text,
-                                    start=tiempo_inicio,
-                                    end=tiempo_fin,
-                                    buttons=lista_botones # Pasamos la lista (o None)
-                                )
-                                ultima_actualizacion = tiempo_actual
-                            except:
-                                RPC = conectar_discord()
-                else:
-                    pass
-            else:
-                if ultimo_titulo != "":
-                    try:
-                        RPC.clear()
-                        ultimo_titulo = ""
-                        utils.log("❌ Stremio cerrado.")
-                    except: pass
-
-        except Exception as e:
-            utils.log(f"Error Loop: {e}")
-            time.sleep(CONFIG["update_interval"])
+class StremioRPCClient:
+    def __init__(self):
+        self.running = True
+        self.config = config_manager.cargar_config()
+        self.rpc = None
+        self.last_title = ""
+        self.last_update = 0
+        self.start_time = None
+        self.end_time = None
+        self.current_poster = "stremio_logo"
+        self.official_title = ""
         
-        time.sleep(CONFIG["update_interval"])
+    def connect_discord(self):
+        self.rpc = None
+        while self.rpc is None and self.running:
+            try:
+                logging.info("Conectando a Discord...")
+                self.rpc = Presence(self.config["client_id"])
+                self.rpc.connect()
+                logging.info("✅ Conectado a Discord")
+            except Exception as e:
+                logging.error(f"Error conectando a Discord: {e}")
+                time.sleep(10)
+        return self.rpc
 
-    try: RPC.close() 
-    except: pass
+    def run_logic(self):
+        logging.info("🚀 Hilo Principal V5.1 (Class Refactor) Iniciado.")
+        
+        self.connect_discord()
 
-def salir(icon, item):
-    global APP_RUNNING
-    APP_RUNNING = False
+        while self.running:
+            try:
+                try:
+                    response = requests.get("http://127.0.0.1:11470/stats.json", timeout=3)
+                    connected = True
+                except requests.RequestException:
+                    connected = False
+
+                if connected and response.status_code == 200:
+                    data = response.json()
+                    
+                    if len(data) > 0:
+                        video = list(data.values())[-1]
+                        raw_name = str(video.get('name', ''))
+                        
+                        if raw_name:
+                            clean_name, video_type = utils.extraer_datos_video(raw_name)
+                            current_time = time.time()
+                            
+                            # Stats
+                            try:
+                                total = video.get('length', 0)
+                                if total == 0 and 'files' in video:
+                                    for f in video['files']:
+                                        if f.get('length', 0) > total: total = f.get('length', 0)
+                                downloaded = video.get('downloaded', 0)
+                                speed = video.get('downSpeed', 0)
+                                percentage = int((downloaded/total)*100) if total > 0 else 0
+                                stats_text = f"⬇️ {utils.formato_velocidad(speed)} | 💾 {percentage}%"
+                            except Exception:
+                                stats_text = "Stremio RPC"
+
+                            if clean_name != self.last_title:
+                                self.start_time = time.time()
+                                self.last_title = clean_name
+                                
+                                logging.info(f"🔎 API: {clean_name} ({video_type})")
+                                meta = utils.obtener_metadatos(clean_name, video_type)
+                                
+                                self.current_poster = meta["poster"]
+                                self.official_title = meta["name"]
+                                
+                                runtime = meta["runtime"]
+                                if self.config["fixed_duration_minutes"] > 0:
+                                    self.end_time = self.start_time + (self.config["fixed_duration_minutes"] * 60)
+                                elif runtime > 0:
+                                    self.end_time = self.start_time + (runtime * 60)
+                                else:
+                                    self.end_time = None
+
+                            if current_time - self.last_update > 15:
+                                try:
+                                    # --- FIX DEL BOTÓN FANTASMA ---
+                                    buttons_list = None
+                                    if self.config.get("show_search_button", True): # Verificamos config
+                                        url_btn = f"https://www.google.com/search?q={urllib.parse.quote(self.official_title)}+anime"
+                                        buttons_list = [{"label": "Buscar Anime 🔎", "url": url_btn}]
+
+                                    self.rpc.update(
+                                        activity_type=ActivityType.WATCHING,
+                                        details=self.official_title,
+                                        state=None,
+                                        large_image=self.current_poster,
+                                        large_text=stats_text,
+                                        start=self.start_time,
+                                        end=self.end_time,
+                                        buttons=buttons_list
+                                    )
+                                    self.last_update = current_time
+                                except Exception as e:
+                                    logging.error(f"Error actualizando RPC: {e}")
+                                    self.connect_discord()
+                    else:
+                        pass
+                else:
+                    if self.last_title != "":
+                        try:
+                            self.rpc.clear()
+                            self.last_title = ""
+                            logging.info("❌ Stremio cerrado.")
+                        except Exception: pass
+
+            except Exception as e:
+                logging.error(f"Error Loop: {e}")
+                time.sleep(self.config["update_interval"])
+            
+            time.sleep(self.config["update_interval"])
+
+        try: 
+            if self.rpc: self.rpc.close() 
+        except Exception: pass
+
+    def stop(self):
+        self.running = False
+
+def exit_app(icon, item, client):
+    client.stop()
     icon.stop()
 
-def abrir_logs(icon, item):
+def open_logs(icon, item):
     os.startfile(config_manager.PATH_LOG)
 
-def abrir_config(icon, item):
+def open_config(icon, item):
+    import subprocess # Moved import here as it's only used in this function
     if getattr(sys, 'frozen', False):
-        import subprocess
         subprocess.Popen([sys.executable, "gui"])
     else:
-        import subprocess
         subprocess.Popen([sys.executable, "gui.py"])
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "gui":
-        import gui
         gui.abrir_ventana()
         sys.exit()
 
-    utils.gestionar_logs()
-    hilo = threading.Thread(target=bucle_logica)
-    hilo.daemon = True
-    hilo.start()
+    # utils.gestionar_logs() # Ya no es necesario con logging.FileHandler (aunque se podría configurar rotación)
+    
+    client = StremioRPCClient()
+    
+    thread = threading.Thread(target=client.run_logic)
+    thread.daemon = True
+    thread.start()
     
     try:
         if os.path.exists(config_manager.PATH_ICON):
             img = Image.open(config_manager.PATH_ICON)
             menu = Menu(
-                MenuItem('Configuración ⚙️', abrir_config),
+                MenuItem('Configuración ⚙️', open_config),
                 MenuItem('Iniciar con Windows', utils.toggle_autostart, checked=lambda item: utils.check_autostart()),
-                MenuItem('Ver Logs', abrir_logs),
-                MenuItem('Salir', salir)
+                MenuItem('Ver Logs', open_logs),
+                MenuItem('Salir', lambda icon, item: exit_app(icon, item, client))
             )
             icon = Icon("StremioRPC", img, "Stremio RPC", menu)
             icon.run()
         else:
-            while APP_RUNNING: time.sleep(1)
-    except:
-        while APP_RUNNING: time.sleep(1)
+            while client.running: time.sleep(1)
+    except KeyboardInterrupt:
+        client.stop()
+    except Exception as e:
+        logging.critical(f"Error fatal: {e}")
+        while client.running: time.sleep(1)
