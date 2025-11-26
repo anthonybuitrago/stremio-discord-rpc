@@ -11,29 +11,28 @@ This workflow guides you through the process of creating a new release for the S
 ## Steps
 
 1.  **Tag the Release**
-    Since the last release was `v5.0`, we will tag this new version as `v5.1`.
+    Since the last release was `v5.1`, we will tag this new version as `v5.2`.
     Run the following command:
     ```powershell
-    git tag v5.1
+    git tag v5.2
     ```
 
 2.  **Push the Tag**
     Push the tag to the remote repository:
     ```powershell
-    git push origin v5.1
+    git push origin v5.2
     ```
 
 3.  **Create Release on GitHub**
     - Go to your repository on GitHub: https://github.com/anthonybuitrago/stremio-discord-rpc/releases
     - Click "Draft a new release".
-    - Click "Choose a tag" and select `v5.1`.
-    - **Title**: `v5.1 - Performance & Stability Update`
+    - Click "Choose a tag" and select `v5.2`.
+    - **Title**: `v5.2 - UI Refinement`
     - **Description**:
       ```markdown
       ## What's Changed
-      - **Removed Pause Detection**: Fixed issues with false positives when Stremio is open but not playing.
-      - **Enhanced Metadata Fetching**: Improved cover art detection and title cleaning.
-      - **Code Cleanup**: Removed unused branches and optimized backend logic.
+      - **Simplified Status Display**: Removed the download speed (KB/s) to avoid static values due to Discord rate limits.
+      - **Cleaner UI**: Now shows only the percentage (e.g., `💾 45%`) for a cleaner look.
       ```
     - **Assets**: Drag and drop the `StremioRPC.exe` file.
 
