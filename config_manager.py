@@ -3,11 +3,11 @@ import os
 import sys
 
 # --- RUTAS DEL SISTEMA ---
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     # Para archivos que deben persistir (config, logs), usamos la carpeta del ejecutable
     BASE_DIR = os.path.dirname(sys.executable)
     # Para recursos internos (iconos), usamos la carpeta temporal de PyInstaller
-    if hasattr(sys, '_MEIPASS'):
+    if hasattr(sys, "_MEIPASS"):
         ASSET_DIR = sys._MEIPASS
     else:
         ASSET_DIR = os.path.dirname(sys.executable)
@@ -24,9 +24,10 @@ DEFAULT_CONFIG = {
     "client_id": "1441601634374385696",
     "update_interval": 5,
     "tolerance_seconds": 60,
-    "show_search_button": True,     # Control del Botón
-    "fixed_duration_minutes": 0     # 0 = Auto/Real, 24 = Anime
+    "show_search_button": True,  # Control del Botón
+    "fixed_duration_minutes": 0,  # 0 = Auto/Real, 24 = Anime
 }
+
 
 def cargar_config():
     """Carga la configuración desde el JSON o crea uno nuevo si no existe."""
@@ -35,7 +36,7 @@ def cargar_config():
             print(f"⚠️ Config no encontrada. Creando nueva en: {PATH_CONFIG}")
             guardar_config(DEFAULT_CONFIG)
             return DEFAULT_CONFIG
-            
+
         with open(PATH_CONFIG, "r", encoding="utf-8") as f:
             datos = json.load(f)
             # Fusionar con default para asegurar integridad
@@ -49,6 +50,7 @@ def cargar_config():
     except Exception as e:
         print(f"❌ Error leyendo config: {e}")
         return DEFAULT_CONFIG
+
 
 def guardar_config(datos):
     """Guarda el diccionario en el archivo JSON."""

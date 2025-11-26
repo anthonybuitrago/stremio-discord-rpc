@@ -1,20 +1,28 @@
 import time
 import re
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import urllib.parse
 import os
 import sys
 import subprocess
+import logging
 from config_manager import PATH_LOG
 
-def log(mensaje):
-    """Escribe mensajes en el archivo de registro y en consola."""
-    texto = f"[{time.strftime('%H:%M:%S')}] {mensaje}"
-    try:
-        print(texto)
-        with open(PATH_LOG, "a", encoding="utf-8") as f:
-            f.write(texto + "\n")
-    except: pass
+def get_robust_session():
+    """Retorna una sesión de requests con política de reintentos."""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
 
 def gestionar_logs():
     try:
@@ -35,16 +43,19 @@ def extraer_datos_video(nombre_crudo):
     tipo_detectado = "auto" 
 
     # 1. BUSCAR EPISODIO (S01E01, 1x01, - 01)
-    match_episodio = re.search(r'( S\d+E\d+ | \d+x\d+ | [ \-_]0?(\d{1,4})(?:[ \-_\[\.]) )', nombre, re.IGNORECASE)
+    # Agregamos (?: |$) para permitir que coincida al final del string
+    match_episodio = re.search(r'( S\d+E\d+(?: |$)| \d+x\d+(?: |$)| [ \-_]0?(\d{1,4})(?:[ \-_\[\.]) )', nombre, re.IGNORECASE)
     
     # 2. BUSCAR SOLO TEMPORADA (S01)
-    match_temporada = re.search(r'( S\d{1,2} | Season \d{1,2} )', nombre, re.IGNORECASE)
+    # Eliminamos espacios extra en el regex para permitir coincidencia al final
+    match_temporada = re.search(r'( S\d{1,2}(?: |$)| Season \d{1,2}(?: |$))', nombre, re.IGNORECASE)
 
     # 3. BUSCAR AÑO
     match_anio = re.search(r'\b(19\d{2}|20\d{2})\b', nombre)
 
     if match_episodio:
         tipo_detectado = "serie"
+        # Usamos group(0) para obtener todo el match y limpiar desde ahí
         indice = match_episodio.start()
         nombre = nombre[:indice]
         
@@ -55,7 +66,7 @@ def extraer_datos_video(nombre_crudo):
 
     elif match_anio:
         tipo_detectado = "peli"
-        indice = match_anio.end()
+        indice = match_anio.start() # Usamos start() para cortar ANTES del año
         nombre = nombre[:indice]
     
     nombre = nombre.replace("mkv", "").replace("mp4", "").replace("avi", "")
@@ -109,8 +120,16 @@ def limpiar_titulo_api(api_name, nombre_original):
         
     return api_name
 
+# --- CACHE DE METADATOS ---
+METADATA_CACHE = {}
+
 # --- BÚSQUEDA API MEJORADA (V39.0) ---
 def obtener_metadatos(nombre_busqueda, tipo_forzado="auto"):
+    # Verificar cache
+    cache_key = (nombre_busqueda, tipo_forzado)
+    if cache_key in METADATA_CACHE:
+        return METADATA_CACHE[cache_key]
+
     # Inicializamos con los datos locales como respaldo seguro
     datos = {"poster": "stremio_logo", "runtime": 0, "name": nombre_busqueda}
     
@@ -118,6 +137,9 @@ def obtener_metadatos(nombre_busqueda, tipo_forzado="auto"):
         return datos
     
     try:
+        # Usamos una sesión robusta para evitar fallos por red inestable
+        session = get_robust_session()
+
         # Función interna para realizar la búsqueda
         def ejecutar_busqueda(termino):
             query = urllib.parse.quote(termino)
@@ -125,7 +147,7 @@ def obtener_metadatos(nombre_busqueda, tipo_forzado="auto"):
             def buscar_en(tipo_api):
                 url = f"https://v3-cinemeta.strem.io/catalog/{tipo_api}/top/search={query}.json"
                 try:
-                    resp = requests.get(url, timeout=5)
+                    resp = session.get(url, timeout=5)
                     data = resp.json()
                     
                     if 'metas' in data and len(data['metas']) > 0:
@@ -172,12 +194,14 @@ def obtener_metadatos(nombre_busqueda, tipo_forzado="auto"):
             if match_anio:
                 nombre_sin_anio = nombre_busqueda[:match_anio.start()].strip()
                 if len(nombre_sin_anio) > 2:
-                    log(f"🔄 Reintentando sin año: {nombre_sin_anio}")
+                    logging.info(f"🔄 Reintentando sin año: {nombre_sin_anio}")
                     ejecutar_busqueda(nombre_sin_anio)
 
     except Exception as e:
-        log(f"⚠️ Error Metadata: {e}")
+        logging.error(f"⚠️ Error Metadata: {e}")
     
+    # Guardar en cache
+    METADATA_CACHE[cache_key] = datos
     return datos
 
 # --- LÓGICA AUTO-START ---
@@ -216,10 +240,10 @@ def toggle_autostart(icon, item):
     if os.path.exists(link_path):
         try:
             os.remove(link_path)
-            log("🗑️ Auto-start desactivado.")
+            logging.info("🗑️ Auto-start desactivado.")
             # Opcional: Notificar al usuario visualmente si fuera posible
         except Exception as e:
-            log(f"Error borrando link: {e}")
+            logging.error(f"Error borrando link: {e}")
     
     # Si no existe, lo creamos (Toggle ON)
     else:
@@ -240,9 +264,9 @@ def toggle_autostart(icon, item):
                 ["powershell", "-Command", ps_script], 
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             )
-            log("✅ Auto-start activado (Modo Silencioso).")
+            logging.info("✅ Auto-start activado (Modo Silencioso).")
         except Exception as e:
-            log(f"Error creando link: {e}")
+            logging.error(f"Error creando link: {e}")
 
 def set_autostart(enable: bool):
     """
