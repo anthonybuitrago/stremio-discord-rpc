@@ -45,7 +45,7 @@ def extraer_datos_video(nombre_crudo):
 
     # 1. BUSCAR EPISODIO (S01E01, 1x01, - 01)
     # Agregamos (?: |$) para permitir que coincida al final del string
-    match_episodio = re.search(r'( S\d+E\d+(?: |$)| \d+x\d+(?: |$)| [ \-_]0?(\d{1,4})(?:[ \-_\[\.]) )', nombre, re.IGNORECASE)
+    match_episodio = re.search(r'( S\d+E\d+(?: |$)| \d+x\d+(?: |$)|[ \-_]+0?(\d{1,4})(?:[ \-_\[\.]|$))', nombre, re.IGNORECASE)
     
     # 2. BUSCAR SOLO TEMPORADA (S01)
     # Eliminamos espacios extra en el regex para permitir coincidencia al final
@@ -74,8 +74,13 @@ def extraer_datos_video(nombre_crudo):
     nombre = re.sub(r'\s+', ' ', nombre).strip()
     nombre = nombre.strip(".-_ ")
 
+    # 4. LIMPIEZA EXTRA DE TEMPORADAS (2nd Season, Season 2, etc)
+    # Esto es crucial porque la API falla con "Haikyu!! 2nd Season"
+    nombre = re.sub(r'\b\d{1,2}(st|nd|rd|th)? Season\b', '', nombre, flags=re.IGNORECASE)
+    nombre = re.sub(r'\bSeason \d{1,2}\b', '', nombre, flags=re.IGNORECASE)
+
     if len(nombre) < 2: return "Stremio", "auto"
-    return nombre, tipo_detectado
+    return nombre.strip(), tipo_detectado
 
 def formato_velocidad(bytes_sec):
     try:

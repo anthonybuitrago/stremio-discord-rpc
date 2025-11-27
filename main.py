@@ -64,6 +64,7 @@ class StremioRPCClient:
         self.config = config_manager.cargar_config()
         self.rpc = None
         self.last_title = ""
+        self.last_raw_title = ""
         self.last_update = 0
         self.start_time = None
         self.end_time = None
@@ -107,8 +108,13 @@ class StremioRPCClient:
             pass
         return "Stremio"
 
-    def _update_rpc(self, clean_name, video_type, stats_text):
+    def _update_rpc(self, clean_name, video_type, stats_text, raw_name):
         """Actualiza la presencia de Discord si es necesario."""
+        
+        # [MODIFICADO] Asegurar conexión si se cerró previamente para historial
+        if self.rpc is None:
+            self.connect_discord()
+
         current_time = time.time()
 
         # Si cambió el título, buscamos nuevos metadatos
@@ -120,6 +126,12 @@ class StremioRPCClient:
             
             self.current_poster = meta["poster"]
             self.official_title = meta["name"]
+
+        # [NUEVO] Si cambió el archivo/episodio real, reiniciamos el tiempo
+        if raw_name != self.last_raw_title:
+            self.last_raw_title = raw_name
+            self.start_time = time.time()
+            logging.info(f"⏱️ Nuevo episodio detectado. Reiniciando tiempo.")
 
         # Actualizamos RPC cada 15 segundos
         if current_time - self.last_update > 15:
@@ -135,6 +147,7 @@ class StremioRPCClient:
                     state=None,
                     large_image=self.current_poster,
                     large_text=stats_text,
+                    start=self.start_time,
                     buttons=buttons_list
                 )
                 self.last_update = current_time
@@ -154,10 +167,75 @@ class StremioRPCClient:
                     logging.info("⚠️ API desconectada pero Stremio sigue abierto. Manteniendo RPC.")
                     return
 
-                self.rpc.clear()
+                # [MODIFICADO] Cerramos conexión en lugar de limpiar para que quede en "Actividad Reciente"
+                if self.rpc:
+                    self.rpc.close()
+                    self.rpc = None
+                
                 self.last_title = ""
-                logging.info("❌ Stremio cerrado.")
+                logging.info("❌ Stremio cerrado. Conexión cerrada para preservar historial.")
             except Exception: pass
+
+    def _get_active_file_name(self, data):
+        """Intenta detectar el archivo exacto que se está reproduciendo."""
+        try:
+            video = list(data.values())[-1]
+            files = video.get('files', [])
+            selections = video.get('selections', [])
+            
+            if not files or not selections:
+                return None
+
+            # 1. Calcular tamaño total y buscar índice de pieza máximo
+            total_size = sum(f.get('length', 0) for f in files)
+            max_piece = 0
+            prio_piece = -1
+            
+            max_prio = 0
+            for s in selections:
+                if s.get('to', 0) > max_piece:
+                    max_piece = s['to']
+                
+                # [MODIFICADO] Buscamos la pieza con mayor prioridad (>0)
+                # Antes solo buscaba priority == 1, lo que podía fallar si Stremio usaba otro valor
+                prio = s.get('priority', 0)
+                if prio > max_prio:
+                    max_prio = prio
+                    prio_piece = s.get('from', 0)
+            
+            # logging.info(f"DEBUG: MaxPiece={max_piece}, PrioPiece={prio_piece}, Selections={len(selections)}")
+            
+            if prio_piece == -1: return None
+            if max_piece == 0: return None
+
+            # 2. Estimar tamaño de pieza (Upper Bound Logic)
+            # El tamaño de pieza debe ser tal que piece_size * max_piece <= total_size
+            est_max_piece_size = total_size / max_piece
+            
+            # Tamaños comunes de pieza (256KB a 16MB)
+            common_sizes = [256*1024, 512*1024, 1024*1024, 2*1024*1024, 4*1024*1024, 8*1024*1024, 16*1024*1024]
+            
+            # Buscar el tamaño más grande que sea válido
+            piece_size = common_sizes[0]
+            for size in common_sizes:
+                if size <= est_max_piece_size:
+                    piece_size = size
+                else:
+                    break
+            
+            # 3. Calcular offset y buscar archivo
+            current_offset = prio_piece * piece_size
+            
+            for f in files:
+                start = f.get('offset', 0)
+                length = f.get('length', 0)
+                if start <= current_offset < (start + length):
+                    return f.get('name')
+                    
+        except Exception as e:
+            logging.error(f"Error detectando archivo: {e}")
+            
+        return None
 
     def run_logic(self):
         logging.info("🚀 Stremio RPC v5.2 Iniciado")
@@ -182,13 +260,21 @@ class StremioRPCClient:
 
                 if connected and len(data) > 0:
                     video = list(data.values())[-1]
-                    raw_name = str(video.get('name', ''))
+                    
+                    # Intentar detectar el archivo específico (Episodio)
+                    active_file = self._get_active_file_name(data)
+                    
+                    if active_file:
+                        raw_name = active_file
+                        # logging.info(f"📁 Archivo detectado: {active_file}")
+                    else:
+                        raw_name = str(video.get('name', ''))
                     
                     if raw_name:
                         clean_name, video_type = utils.extraer_datos_video(raw_name)
                         if clean_name:
                             stats_text = self._process_video_stats(video)
-                            self._update_rpc(clean_name, video_type, stats_text)
+                            self._update_rpc(clean_name, video_type, stats_text, raw_name)
                     else:
                         # Stremio abierto pero sin reproducir nada
                         pass
