@@ -3,10 +3,18 @@ import config_manager
 import utils
 import os
 import ctypes
+from PIL import Image
 
+import webbrowser
+
+# Configuración de Tema
 ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
+ctk.set_default_color_theme("dark-blue") 
 
+# Colores Stremio
+STREMIO_PURPLE = "#5A4FCF"
+STREMIO_PURPLE_HOVER = "#483D8B"
+STREMIO_BG = "#151515"
 
 class ConfigWindow(ctk.CTk):
     def __init__(self):
@@ -21,13 +29,12 @@ class ConfigWindow(ctk.CTk):
         self.current_config = config_manager.cargar_config()
 
         self.title("Configuración - Stremio RPC")
-        self.geometry("400x500")
+        self.geometry("350x480") # Un poco más alto para los nuevos botones
         self.resizable(False, False)
 
         if os.path.exists(config_manager.PATH_ICON):
             try:
                 self.iconbitmap(config_manager.PATH_ICON)
-                self.after(200, lambda: self.iconbitmap(config_manager.PATH_ICON))
             except:
                 pass
 
@@ -38,10 +45,13 @@ class ConfigWindow(ctk.CTk):
         self.after(500, lambda: self.attributes("-topmost", False))
 
         # --- UI PRINCIPAL (TABS) ---
-        self.tabview = ctk.CTkTabview(self, width=380, height=450)
+        self.tabview = ctk.CTkTabview(self, width=330, height=430)
         self.tabview.pack(padx=10, pady=10, fill="both", expand=True)
+        
+        self.tabview.configure(segmented_button_selected_color=STREMIO_PURPLE)
+        self.tabview.configure(segmented_button_selected_hover_color=STREMIO_PURPLE_HOVER)
 
-        self.tab_config = self.tabview.add("Configuración")
+        self.tab_config = self.tabview.add("Ajustes")
         self.tab_logs = self.tabview.add("Logs")
 
         # ==========================================
@@ -49,102 +59,101 @@ class ConfigWindow(ctk.CTk):
         # ==========================================
         
         self.label_title = ctk.CTkLabel(
-            self.tab_config, text="Ajustes de Stremio RPC", font=("Roboto", 22, "bold")
+            self.tab_config, text="Stremio RPC", font=("Roboto", 24, "bold"), text_color="white"
         )
-        self.label_title.pack(pady=10)
-
-        # ID
-        self.lbl_id = ctk.CTkLabel(self.tab_config, text="Discord Client ID:")
-        self.lbl_id.pack(anchor="w", padx=20)
-        self.entry_id = ctk.CTkEntry(self.tab_config, placeholder_text="Ingresa tu ID", width=320)
-        self.entry_id.insert(0, self.current_config.get("client_id", ""))
-        self.entry_id.pack(pady=(0, 10))
-
-        # Intervalo
-        self.lbl_interval = ctk.CTkLabel(
-            self.tab_config,
-            text=f"Velocidad de Actualización: {self.current_config.get('update_interval')} seg",
-        )
-        self.lbl_interval.pack(anchor="w", padx=20)
-        self.slider_interval = ctk.CTkSlider(
-            self.tab_config, from_=2, to=30, number_of_steps=28, command=self.update_slider
-        )
-        self.slider_interval.set(self.current_config.get("update_interval", 5))
-        self.slider_interval.pack(fill="x", padx=20, pady=(0, 15))
-
-        # MODO DE TIEMPO
-        self.lbl_time = ctk.CTkLabel(
-            self.tab_config, text="Estilo de Tiempo:", font=("Roboto", 14, "bold")
-        )
-        self.lbl_time.pack(anchor="w", padx=20)
-
-        self.time_mode_var = ctk.StringVar(value="Auto")
-        current_fixed = self.current_config.get("fixed_duration_minutes", 0)
-        if current_fixed == 24:
-            self.time_mode_var.set("Anime")
-        elif current_fixed == 0:
-            self.time_mode_var.set("Auto")
-
-        self.radio_auto = ctk.CTkRadioButton(
-            self.tab_config,
-            text="Automático (API / Real)",
-            variable=self.time_mode_var,
-            value="Auto",
-        )
-        self.radio_auto.pack(anchor="w", padx=20, pady=5)
-
-        self.radio_anime = ctk.CTkRadioButton(
-            self.tab_config,
-            text="Forzar Anime (24 min)",
-            variable=self.time_mode_var,
-            value="Anime",
-        )
-        self.radio_anime.pack(anchor="w", padx=20, pady=5)
+        self.label_title.pack(pady=(15, 20))
 
         # OPCIONES SISTEMA
-        self.lbl_sys = ctk.CTkLabel(
-            self.tab_config, text="Opciones de Sistema:", font=("Roboto", 14, "bold")
+        self.frame_opts = ctk.CTkFrame(self.tab_config, fg_color="transparent")
+        self.frame_opts.pack(fill="x", padx=20)
+
+        # Switch: Auto-Start
+        self.switch_autostart = ctk.CTkSwitch(
+            self.frame_opts, 
+            text="Iniciar con Windows",
+            progress_color=STREMIO_PURPLE,
+            font=("Roboto", 14)
         )
-        self.lbl_sys.pack(anchor="w", padx=20, pady=(15, 5))
-
-        # Switch: Botón
-        self.switch_btn = ctk.CTkSwitch(self.tab_config, text="Mostrar Botón 'Buscar Anime'")
-        if self.current_config.get("show_search_button", True):
-            self.switch_btn.select()
-        self.switch_btn.pack(anchor="w", padx=20, pady=5)
-
-        # Switch: Auto-Start (Lee el estado real de Windows)
-        self.switch_autostart = ctk.CTkSwitch(self.tab_config, text="Iniciar con Windows")
         if utils.check_autostart():
             self.switch_autostart.select()
-        self.switch_autostart.pack(anchor="w", padx=20, pady=5)
+        self.switch_autostart.pack(anchor="w", pady=10)
+
+        # Switch: Botón
+        self.switch_btn = ctk.CTkSwitch(
+            self.frame_opts, 
+            text="Mostrar Botón 'Buscar Anime'",
+            progress_color=STREMIO_PURPLE,
+            font=("Roboto", 14)
+        )
+        if self.current_config.get("show_search_button", True):
+            self.switch_btn.select()
+        self.switch_btn.pack(anchor="w", pady=10)
+
+        # Botón Reiniciar RPC
+        self.btn_restart = ctk.CTkButton(
+            self.tab_config,
+            text="♻️ Reiniciar Conexión RPC",
+            command=self.reiniciar_rpc,
+            height=35,
+            font=("Roboto", 12),
+            fg_color="#333333",
+            hover_color="#444444"
+        )
+        self.btn_restart.pack(fill="x", padx=20, pady=(20, 5))
 
         # Botón Guardar
         self.btn_save = ctk.CTkButton(
             self.tab_config,
             text="GUARDAR CAMBIOS",
             command=self.guardar_datos,
-            height=40,
-            font=("Roboto", 14, "bold"),
-            fg_color="green",
-            hover_color="darkgreen",
+            height=45,
+            font=("Roboto", 15, "bold"),
+            fg_color=STREMIO_PURPLE,
+            hover_color=STREMIO_PURPLE_HOVER,
+            corner_radius=10
         )
-        self.btn_save.pack(fill="x", padx=20, pady=(20, 10))
+        self.btn_save.pack(fill="x", padx=20, pady=(10, 10))
+
+        # Link GitHub
+        self.lbl_github = ctk.CTkLabel(
+            self.tab_config, 
+            text="GitHub / Soporte", 
+            font=("Roboto", 11, "underline"),
+            text_color="gray",
+            cursor="hand2"
+        )
+        self.lbl_github.pack(side="bottom", pady=10)
+        self.lbl_github.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/anthonybuitrago/stremio-discord-rpc"))
 
         # ==========================================
         #           PESTAÑA LOGS
         # ==========================================
-        self.textbox_logs = ctk.CTkTextbox(self.tab_logs, width=360, height=350)
-        self.textbox_logs.pack(padx=10, pady=10, fill="both", expand=True)
+        self.textbox_logs = ctk.CTkTextbox(self.tab_logs, width=300, height=300)
+        self.textbox_logs.pack(padx=5, pady=5, fill="both", expand=True)
         
-        self.btn_refresh_logs = ctk.CTkButton(
-            self.tab_logs,
-            text="🔄 Actualizar Logs",
-            command=self.cargar_logs
+        self.frame_logs_btns = ctk.CTkFrame(self.tab_logs, fg_color="transparent")
+        self.frame_logs_btns.pack(fill="x", pady=5)
+
+        self.btn_open_logs = ctk.CTkButton(
+            self.frame_logs_btns,
+            text="📂 Abrir Archivo",
+            command=self.abrir_logs_sistema,
+            width=140,
+            fg_color="#333333",
+            hover_color="#444444"
         )
-        self.btn_refresh_logs.pack(pady=5)
+        self.btn_open_logs.pack(side="left", padx=5)
+
+        self.btn_refresh_logs = ctk.CTkButton(
+            self.frame_logs_btns,
+            text="🔄 Actualizar",
+            command=self.cargar_logs,
+            width=140,
+            fg_color=STREMIO_PURPLE,
+            hover_color=STREMIO_PURPLE_HOVER
+        )
+        self.btn_refresh_logs.pack(side="right", padx=5)
         
-        # Cargar logs al iniciar
         self.cargar_logs()
 
     def cargar_logs(self):
@@ -154,7 +163,6 @@ class ConfigWindow(ctk.CTk):
         if os.path.exists(config_manager.PATH_LOG):
             try:
                 with open(config_manager.PATH_LOG, "r", encoding="utf-8") as f:
-                    # Leer últimas 50 líneas para no saturar
                     lines = f.readlines()[-50:]
                     self.textbox_logs.insert("0.0", "".join(lines))
             except Exception as e:
@@ -162,24 +170,36 @@ class ConfigWindow(ctk.CTk):
         else:
             self.textbox_logs.insert("0.0", "No hay archivo de logs aún.")
             
+        self.textbox_logs.see("end")
         self.textbox_logs.configure(state="disabled")
+        
+        # Feedback visual
+        original_text = self.btn_refresh_logs.cget("text")
+        self.btn_refresh_logs.configure(text="¡Actualizado!")
+        self.after(1000, lambda: self.btn_refresh_logs.configure(text=original_text))
 
-    def update_slider(self, value):
-        self.lbl_interval.configure(
-            text=f"Velocidad de Actualización: {int(value)} seg"
-        )
+    def abrir_logs_sistema(self):
+        if os.path.exists(config_manager.PATH_LOG):
+            os.startfile(config_manager.PATH_LOG)
+
+    def reiniciar_rpc(self):
+        # Crear flag file para que main.py lo detecte
+        flag_path = os.path.join(os.path.dirname(config_manager.PATH_CONFIG), "rpc_restart.flag")
+        with open(flag_path, "w") as f:
+            f.write("restart")
+        
+        original_text = self.btn_restart.cget("text")
+        self.btn_restart.configure(text="✅ Solicitud Enviada")
+        self.after(2000, lambda: self.btn_restart.configure(text=original_text))
 
     def guardar_datos(self):
-        # Procesar Modo de Tiempo
-        modo = self.time_mode_var.get()
-        fixed_minutes = 24 if modo == "Anime" else 0
-
-        # Crear diccionario
+        # Solo guardamos lo que el usuario puede tocar
         datos_nuevos = self.current_config.copy()
-        datos_nuevos["client_id"] = self.entry_id.get().strip()
-        datos_nuevos["update_interval"] = int(self.slider_interval.get())
         datos_nuevos["show_search_button"] = bool(self.switch_btn.get())
-        datos_nuevos["fixed_duration_minutes"] = fixed_minutes
+        
+        # Aseguramos valores por defecto para lo oculto
+        datos_nuevos["update_interval"] = 15
+        datos_nuevos["fixed_duration_minutes"] = 0
 
         # Guardar JSON
         config_manager.guardar_config(datos_nuevos)

@@ -15,27 +15,47 @@ import utils
 import gui
 
 # --- CONFIGURACIÓN DE LOGGING ---
-# Cargar configuración primero para obtener parámetros de log
-config = config_manager.cargar_config()
+class CustomFormatter(logging.Formatter):
+    def format(self, record):
+        original_msg = record.msg
+        if record.levelno == logging.INFO:
+            if not any(e in str(original_msg) for e in ["✅", "🚀", "🔎", "♻️", "🗑️", "⚠️", "❌", "ℹ️", "🔌"]):
+                record.msg = f"ℹ️ {original_msg}"
+        elif record.levelno == logging.WARNING:
+            if "⚠️" not in str(original_msg):
+                record.msg = f"⚠️ {original_msg}"
+        elif record.levelno >= logging.ERROR:
+            if "❌" not in str(original_msg):
+                record.msg = f"❌ {original_msg}"
+        
+        result = super().format(record)
+        record.msg = original_msg
+        return result
 
-# Rotación: Leída desde config (Default: 1 MB, 3 backups)
+# Cargar configuración
+config = config_manager.cargar_config()
 log_size = config.get("log_max_size_mb", 1) * 1024 * 1024
 log_backups = config.get("log_backup_count", 3)
 
-handler = RotatingFileHandler(
+formatter = CustomFormatter('[%(asctime)s] %(levelname)s: %(message)s', datefmt='%H:%M:%S')
+
+# File Handler
+file_handler = RotatingFileHandler(
     config_manager.PATH_LOG, 
     maxBytes=log_size, 
     backupCount=log_backups, 
     encoding='utf-8'
 )
+file_handler.setFormatter(formatter)
+
+# Stream Handler (Consola)
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setFormatter(formatter)
+
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s: %(message)s',
-    datefmt='%H:%M:%S',
-    handlers=[
-        handler,
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[file_handler, stream_handler],
+    force=True
 )
 
 class StremioRPCClient:
@@ -93,7 +113,6 @@ class StremioRPCClient:
 
         # Si cambió el título, buscamos nuevos metadatos
         if clean_name != self.last_title:
-            self.start_time = time.time()
             self.last_title = clean_name
             
             logging.info(f"🔎 API: {clean_name} ({video_type})")
@@ -101,14 +120,6 @@ class StremioRPCClient:
             
             self.current_poster = meta["poster"]
             self.official_title = meta["name"]
-            
-            runtime = meta["runtime"]
-            if self.config["fixed_duration_minutes"] > 0:
-                self.end_time = self.start_time + (self.config["fixed_duration_minutes"] * 60)
-            elif runtime > 0:
-                self.end_time = self.start_time + (runtime * 60)
-            else:
-                self.end_time = None
 
         # Actualizamos RPC cada 15 segundos
         if current_time - self.last_update > 15:
@@ -124,8 +135,6 @@ class StremioRPCClient:
                     state=None,
                     large_image=self.current_poster,
                     large_text=stats_text,
-                    start=self.start_time,
-                    end=self.end_time,
                     buttons=buttons_list
                 )
                 self.last_update = current_time
@@ -151,10 +160,23 @@ class StremioRPCClient:
             except Exception: pass
 
     def run_logic(self):
-        logging.info("🚀 Hilo Principal V5.2 (Modular) Iniciado.")
+        logging.info("🚀 Stremio RPC v5.2 Iniciado")
         self.connect_discord()
 
         while self.running:
+            # 1. Recargar Configuración Dinámica
+            self.config = config_manager.cargar_config()
+
+            # 2. Chequear Flag de Reinicio
+            flag_path = os.path.join(os.path.dirname(config_manager.PATH_CONFIG), "rpc_restart.flag")
+            if os.path.exists(flag_path):
+                logging.info("♻️ Reiniciando RPC a petición del usuario...")
+                try:
+                    if self.rpc: self.rpc.close()
+                    os.remove(flag_path)
+                except: pass
+                self.connect_discord()
+
             try:
                 connected, data = self._fetch_stremio_data()
 
@@ -191,7 +213,13 @@ def exit_app(icon, item, client):
     icon.stop()
 
 def open_logs(icon, item):
-    os.startfile(config_manager.PATH_LOG)
+    if os.path.exists(config_manager.PATH_LOG):
+        os.startfile(config_manager.PATH_LOG)
+
+def restart_rpc_tray(icon, item):
+    flag_path = os.path.join(os.path.dirname(config_manager.PATH_CONFIG), "rpc_restart.flag")
+    with open(flag_path, "w") as f:
+        f.write("restart")
 
 def open_config(icon, item):
     import subprocess
@@ -215,12 +243,13 @@ if __name__ == '__main__':
         if os.path.exists(config_manager.PATH_ICON):
             img = Image.open(config_manager.PATH_ICON)
             menu = Menu(
-                MenuItem('Configuración ⚙️', open_config),
-                MenuItem('Iniciar con Windows', utils.toggle_autostart, checked=lambda item: utils.check_autostart()),
-                MenuItem('Ver Logs', open_logs),
-                MenuItem('Salir', lambda icon, item: exit_app(icon, item, client))
+                MenuItem('⚙️ Configuración', open_config),
+                MenuItem('💻 Iniciar con Windows', utils.toggle_autostart, checked=lambda item: utils.check_autostart()),
+                MenuItem('📂 Abrir Logs', open_logs),
+                MenuItem('♻️ Reiniciar RPC', restart_rpc_tray),
+                MenuItem('❌ Salir', lambda icon, item: exit_app(icon, item, client))
             )
-            icon = Icon("StremioRPC", img, "Stremio RPC", menu)
+            icon = Icon("StremioRPC", img, "Stremio", menu)
             icon.run()
         else:
             while client.running: time.sleep(1)

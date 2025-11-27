@@ -22,7 +22,7 @@ PATH_ICON = os.path.join(ASSET_DIR, "assets", "rpc.ico")
 # --- CONFIGURACIÓN POR DEFECTO V5 ---
 DEFAULT_CONFIG = {
     "client_id": "1441601634374385696",
-    "update_interval": 5,
+    "update_interval": 15,
     "tolerance_seconds": 60,
     "show_search_button": True,  # Control del Botón
     "fixed_duration_minutes": 0,  # 0 = Auto/Real, 24 = Anime
