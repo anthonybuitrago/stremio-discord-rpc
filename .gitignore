@@ -14,6 +14,8 @@ ENV/
 # Logs
 *.log
 stremio_log.txt
+media_rpc_log.txt
+rpc_restart.flag
 
 # Distribution
 build/

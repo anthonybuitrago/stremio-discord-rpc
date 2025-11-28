@@ -827,3 +827,9 @@
 [16:47:10] INFO: ℹ️ Conectando a Discord (ID: 1443754486945415198)...
 [16:47:10] INFO: ✅ Conectado a Discord (Música)
 [16:47:11] INFO: ℹ️ 🎵 Música detectada: Mephisto - QUEEN BEE
+[16:51:27] INFO: 🚀 Media RPC v5.2 Iniciado
+[16:51:28] INFO: ℹ️ Conectando a Discord (ID: 1443754486945415198)...
+[16:51:28] INFO: ✅ Conectado a Discord (Música)
+[16:51:29] INFO: ℹ️ 🎵 Música detectada: 大脳的なランデブー - Kanaria
+[16:53:02] INFO: ℹ️ 🎵 Música detectada: NIGHT DANCER - imase
+[16:56:37] INFO: ℹ️ 🎵 Música detectada: 祈りの唄 - 大原ゆい子

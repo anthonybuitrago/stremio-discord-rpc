@@ -33,6 +33,7 @@ def get_media_info():
             encoding='utf-8', # Force UTF-8 for special chars
             errors='replace', # [NUEVO] Evitar crash si hay caracteres raros
             startupinfo=startupinfo,
+            creationflags=0x08000000, # CREATE_NO_WINDOW
             timeout=5 # Fast timeout
         )
 
