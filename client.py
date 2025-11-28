@@ -374,6 +374,8 @@ class StremioRPCClient:
                             details=music_info['title'],
                             state=music_info['artist'],
                             large_image=large_img,
+                            small_image="music_icon",
+                            small_text="YouTube Music"
                         )
 
                 # Si NO hay música sonando, chequeamos Stremio
