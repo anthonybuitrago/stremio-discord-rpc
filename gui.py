@@ -35,7 +35,7 @@ class ConfigWindow(ctk.CTk):
         self.current_config = config_manager.cargar_config()
 
         self.title("Media RPC - Configuración")
-        self.geometry("400x650") # [MODIFICADO] Más alto para el preview
+        self.geometry("400x450") # [MODIFICADO] Más compacto sin preview
         self.resizable(False, False)
 
         if os.path.exists(config_manager.PATH_ICON):
@@ -89,61 +89,22 @@ class ConfigWindow(ctk.CTk):
             self.frame_opts, 
             text="Mostrar Botón 'Buscar Anime'",
             progress_color=STREMIO_PURPLE,
-            font=("Roboto", 14),
-            command=self.update_preview # [NUEVO] Actualizar preview al cambiar
+            font=("Roboto", 14)
         )
         if self.current_config.get("show_search_button", True):
             self.switch_btn.select()
         self.switch_btn.pack(anchor="w", pady=10)
 
-        # --- PREVIEW SECTION ---
-        self.lbl_preview = ctk.CTkLabel(self.tab_config, text="Vista Previa (Discord):", font=("Roboto", 12, "bold"), text_color="gray")
-        self.lbl_preview.pack(pady=(15, 5))
-
-        self.frame_preview = ctk.CTkFrame(self.tab_config, fg_color=DISCORD_BG, corner_radius=10)
-        self.frame_preview.pack(fill="x", padx=20, pady=5)
-
-        # Mockup Layout
-        self.preview_content = ctk.CTkFrame(self.frame_preview, fg_color="transparent")
-        self.preview_content.pack(padx=10, pady=10, fill="x")
-
-        # Image Placeholder (Stremio Logo)
-        # Intentamos cargar el icono real si existe, sino un cuadro gris
-        self.img_preview = None
-        if os.path.exists(config_manager.PATH_ICON):
-            pil_img = Image.open(config_manager.PATH_ICON)
-            self.img_preview = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(60, 60))
-        
-        self.lbl_img = ctk.CTkLabel(self.preview_content, text="", image=self.img_preview, width=60, height=60, fg_color="#202225", corner_radius=8)
-        self.lbl_img.pack(side="left", padx=(0, 10), anchor="n")
-
-        # Text Info
-        self.frame_text = ctk.CTkFrame(self.preview_content, fg_color="transparent")
-        self.frame_text.pack(side="left", fill="both", expand=True)
-
-        self.lbl_app_name = ctk.CTkLabel(self.frame_text, text="Media RPC", font=("Roboto", 14, "bold"), text_color=DISCORD_TEXT_HEADER, anchor="w")
-        self.lbl_app_name.pack(fill="x")
-
-        self.lbl_details = ctk.CTkLabel(self.frame_text, text="Viendo Anime", font=("Roboto", 12), text_color=DISCORD_TEXT_NORMAL, anchor="w")
-        self.lbl_details.pack(fill="x")
-
-        # self.lbl_state = ctk.CTkLabel(self.frame_text, text="Episodio 1", font=("Roboto", 12), text_color=DISCORD_TEXT_NORMAL, anchor="w")
-        # self.lbl_state.pack(fill="x")
-        
-        self.lbl_time = ctk.CTkLabel(self.frame_text, text="00:15 transcurridos", font=("Roboto", 12), text_color=DISCORD_TEXT_NORMAL, anchor="w")
-        self.lbl_time.pack(fill="x")
-
-        # Button Preview
-        self.btn_preview = ctk.CTkButton(
-            self.frame_preview, 
-            text="Buscar Anime 🔎", 
-            fg_color="#4f545c", 
-            hover_color="#5d6269", 
-            height=25,
-            font=("Roboto", 11),
-            state="disabled" # Solo visual
+        # Switch: Music RPC
+        self.switch_music = ctk.CTkSwitch(
+            self.frame_opts, 
+            text="Activar Detección de Música",
+            progress_color=STREMIO_PURPLE,
+            font=("Roboto", 14)
         )
-        # Se empaqueta dinámicamente en update_preview
+        if self.current_config.get("enable_music_rpc", True):
+            self.switch_music.select()
+        self.switch_music.pack(anchor="w", pady=10)
 
         # -----------------------
 
@@ -157,7 +118,7 @@ class ConfigWindow(ctk.CTk):
             fg_color="#333333",
             hover_color="#444444"
         )
-        self.btn_restart.pack(fill="x", padx=20, pady=(20, 5))
+        self.btn_restart.pack(fill="x", padx=20, pady=(40, 5))
 
         # Botón Guardar
         self.btn_save = ctk.CTkButton(
@@ -213,14 +174,6 @@ class ConfigWindow(ctk.CTk):
         self.btn_refresh_logs.pack(side="right", padx=5)
         
         self.cargar_logs()
-        self.update_preview() # Inicializar preview
-
-    def update_preview(self):
-        """Actualiza la visibilidad de elementos en el preview."""
-        if self.switch_btn.get():
-            self.btn_preview.pack(fill="x", padx=10, pady=(0, 10))
-        else:
-            self.btn_preview.pack_forget()
 
     def cargar_logs(self):
         self.textbox_logs.configure(state="normal")
@@ -262,6 +215,7 @@ class ConfigWindow(ctk.CTk):
         # Solo guardamos lo que el usuario puede tocar
         datos_nuevos = self.current_config.copy()
         datos_nuevos["show_search_button"] = bool(self.switch_btn.get())
+        datos_nuevos["enable_music_rpc"] = bool(self.switch_music.get())
         
         # Aseguramos valores por defecto para lo oculto
         datos_nuevos["update_interval"] = 15
