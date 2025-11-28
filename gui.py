@@ -108,6 +108,18 @@ class ConfigWindow(ctk.CTk):
 
         # -----------------------
 
+        # Botón Actualizar
+        self.btn_update = ctk.CTkButton(
+            self.tab_config,
+            text="⬇️ Buscar Actualizaciones",
+            command=self.buscar_actualizaciones,
+            height=35,
+            font=("Roboto", 12),
+            fg_color="#333333",
+            hover_color="#444444"
+        )
+        self.btn_update.pack(fill="x", padx=20, pady=(20, 5))
+
         # Botón Reiniciar RPC
         self.btn_restart = ctk.CTkButton(
             self.tab_config,
@@ -118,7 +130,7 @@ class ConfigWindow(ctk.CTk):
             fg_color="#333333",
             hover_color="#444444"
         )
-        self.btn_restart.pack(fill="x", padx=20, pady=(40, 5))
+        self.btn_restart.pack(fill="x", padx=20, pady=(5, 5))
 
         # Botón Guardar
         self.btn_save = ctk.CTkButton(
@@ -210,6 +222,30 @@ class ConfigWindow(ctk.CTk):
         original_text = self.btn_restart.cget("text")
         self.btn_restart.configure(text="✅ Solicitud Enviada")
         self.after(2000, lambda: self.btn_restart.configure(text=original_text))
+
+    def buscar_actualizaciones(self):
+        self.btn_update.configure(text="Buscando...", state="disabled")
+        self.update_idletasks()
+        
+        try:
+            # Importamos aquí para evitar ciclos o cargas innecesarias
+            import utils 
+            # Definimos la versión actual aquí o la importamos de main/config
+            CURRENT_VERSION = "v5.3" 
+            
+            has_update, new_version = utils.check_for_updates(CURRENT_VERSION)
+            
+            if has_update:
+                self.btn_update.configure(text=f"¡Actualizar a {new_version}!", fg_color=STREMIO_PURPLE, state="normal")
+                self.btn_update.configure(command=lambda: webbrowser.open("https://github.com/anthonybuitrago/stremio-discord-rpc/releases"))
+            else:
+                self.btn_update.configure(text=f"Estás actualizado ({CURRENT_VERSION})", fg_color="green", state="normal")
+                self.after(3000, lambda: self.btn_update.configure(text="⬇️ Buscar Actualizaciones", fg_color="#333333", command=self.buscar_actualizaciones))
+                
+        except Exception as e:
+            self.btn_update.configure(text="Error al buscar", fg_color="red", state="normal")
+            print(f"Error update: {e}")
+            self.after(3000, lambda: self.btn_update.configure(text="⬇️ Buscar Actualizaciones", fg_color="#333333"))
 
     def guardar_datos(self):
         # Solo guardamos lo que el usuario puede tocar
