@@ -95,7 +95,7 @@ class StremioRPCClient:
             self.last_title = clean_name
             
             logging.info(f"🔎 API: {clean_name} ({video_type})")
-            meta = utils.obtener_metadatos(clean_name, video_type)
+            meta = media_manager.search_cinemeta(clean_name, video_type)
             
             self.current_poster = meta["poster"]
             self.official_title = meta["name"]
@@ -307,14 +307,113 @@ class StremioRPCClient:
         
         return best_candidate
 
-    def run_logic(self):
-        # [COSMETICO] Título de ventana (Eliminado para evitar flash)
-        # if os.name == 'nt':
-        #    os.system("title Media RPC")
+    def _handle_music_rpc(self):
+        """Maneja la lógica de detección y RPC de música."""
+        if not self.config.get("enable_music_rpc", True):
+            return False
+
+        music_info = smtc_manager.get_media_info()
+        
+        if music_info and music_info.get("is_playing"):
+            target_id = self.config.get("music_client_id")
+            if not target_id: target_id = self.config["client_id"]
             
+            self.connect_discord(target_id)
+            
+            # Evitar spam de actualizaciones si es la misma canción
+            if (self.last_source == "music" and 
+                self.last_media_name == music_info['title'] and
+                self.last_artist == music_info['artist']):
+                return True
+
+            # Buscar carátula
+            search_query = f"{music_info['artist']} {music_info['title']}"
+            meta = media_manager.search_metadata(search_query)
+            cover_url = meta['cover_url'] if meta else None
+
+            # Actualizar RPC
+            self.last_source = "music"
+            self.last_media_name = music_info['title']
+            self.last_artist = music_info['artist']
+            
+            logging.info(f"🎵 Música detectada: {music_info['title']} - {music_info['artist']}")
+
+            large_img = cover_url if cover_url else "music_icon"
+            
+            self.rpc.update(
+                activity_type=ActivityType.LISTENING,
+                details=music_info['title'],
+                state=music_info['artist'],
+                large_image=large_img,
+                small_image="music_icon",
+                small_text="YouTube Music"
+            )
+            return True
+            
+        return False
+
+    def _handle_stremio_rpc(self):
+        """Maneja la lógica de detección y RPC de Stremio."""
+        # A. Intentar leer Stremio
+        connected, data = self._fetch_stremio_data()
+        
+        # Log de estado de conexión
+        if connected and not self.stremio_was_connected:
+            logging.info("✅ Stremio detectado (API conectada)")
+            self.stremio_was_connected = True
+        elif not connected and self.stremio_was_connected:
+            logging.info("❌ Stremio cerrado o API desconectada")
+            self.stremio_was_connected = False
+
+        if connected and len(data) > 0:
+            # Selección inteligente de candidato
+            video = self._select_best_video(data)
+            
+            if video:
+                # Intentar detectar el archivo específico (Episodio)
+                active_file = self._get_active_file_name(video)
+                
+                if active_file:
+                    raw_name = active_file
+                elif video.get('name'):
+                    raw_name = str(video.get('name'))
+                else:
+                    raw_name = ""
+            else:
+                    # Si no hay candidato válido (solo seeding), usar título de ventana
+                    window_title = utils.get_stremio_window_title()
+                    if window_title:
+                        logging.info(f"ℹ️ Fallback: Usando título de ventana: {window_title}")
+                        raw_name = window_title
+                    else:
+                        raw_name = ""
+            
+            if raw_name:
+                clean_name, video_type = utils.extraer_datos_video(raw_name)
+                if clean_name:
+                    stats_text = self._process_video_stats(video)
+                    
+                    # PRIORIDAD 1: STREMIO (Si no hay música)
+                    self.connect_discord(self.config["client_id"])
+                    self._update_rpc(clean_name, video_type, stats_text, raw_name)
+                    self.last_source = "stremio"
+                    return True
+        return False
+
+    def _cleanup_rpc(self):
+        """Limpia o cierra la conexión RPC si no hay actividad."""
+        # Si veníamos de música, limpiamos siempre
+        if self.last_source == "music":
+            self._clear_rpc()
+            self.last_source = None
+        # Si veníamos de Stremio, _clear_rpc manejará si debe mantenerse o cerrarse
+        elif self.last_source == "stremio":
+            self._clear_rpc()
+            self.last_source = None
+
+    def run_logic(self):
         logging.info("🚀 Media RPC v5.3 Iniciado")
         # [OPTIMIZACION] No conectamos al inicio por defecto.
-        # Esperamos a ver qué se está reproduciendo para conectar al ID correcto.
 
         while self.running:
             # 1. Recargar Configuración Dinámica
@@ -330,113 +429,18 @@ class StremioRPCClient:
                         self.rpc = None
                     os.remove(flag_path)
                 except: pass
-                # No reconectamos aquí, dejamos que el loop lo haga
 
             try:
                 # [MODIFICADO] PRIORIDAD: MÚSICA > STREMIO
+                music_active = self._handle_music_rpc()
                 
-                music_active = False
-
-                if self.config.get("enable_music_rpc", True):
-                    music_info = smtc_manager.get_media_info()
-                    
-                    if music_info and music_info.get("is_playing"):
-                        music_active = True
-                        target_id = self.config.get("music_client_id")
-                        if not target_id: target_id = self.config["client_id"]
-                        
-                        self.connect_discord(target_id)
-                        
-                        # Evitar spam de actualizaciones si es la misma canción
-                        if (self.last_source == "music" and 
-                            self.last_media_name == music_info['title'] and
-                            self.last_artist == music_info['artist']):
-                            time.sleep(self.config["update_interval"])
-                            continue
-
-                        # Buscar carátula
-                        search_query = f"{music_info['artist']} {music_info['title']}"
-                        meta = media_manager.search_metadata(search_query)
-                        cover_url = meta['cover_url'] if meta else None
-
-                        # Actualizar RPC
-                        self.last_source = "music"
-                        self.last_media_name = music_info['title']
-                        self.last_artist = music_info['artist']
-                        
-                        # os.system('cls' if os.name == 'nt' else 'clear')
-                        logging.info(f"🎵 Música detectada: {music_info['title']} - {music_info['artist']}")
-
-                        large_img = cover_url if cover_url else "music_icon"
-                        
-                        self.rpc.update(
-                            activity_type=ActivityType.LISTENING,
-                            details=music_info['title'],
-                            state=music_info['artist'],
-                            large_image=large_img,
-                            small_image="music_icon",
-                            small_text="YouTube Music"
-                        )
-
-                # Si NO hay música sonando, chequeamos Stremio
                 stremio_active = False
                 if not music_active:
-                    # A. Intentar leer Stremio
-                    connected, data = self._fetch_stremio_data()
-                    
-                    # [NUEVO] Log de estado de conexión
-                    if connected and not self.stremio_was_connected:
-                        logging.info("✅ Stremio detectado (API conectada)")
-                        self.stremio_was_connected = True
-                    elif not connected and self.stremio_was_connected:
-                        logging.info("❌ Stremio cerrado o API desconectada")
-                        self.stremio_was_connected = False
-
-                    if connected and len(data) > 0:
-                        # [MODIFICADO] Selección inteligente de candidato
-                        video = self._select_best_video(data)
-                        
-                        if video:
-                            # Intentar detectar el archivo específico (Episodio)
-                            active_file = self._get_active_file_name(video)
-                            
-                            if active_file:
-                                raw_name = active_file
-                            elif video.get('name'):
-                                raw_name = str(video.get('name'))
-                            else:
-                                raw_name = ""
-                        else:
-                             # Si no hay candidato válido (solo seeding), usar título de ventana
-                             window_title = utils.get_stremio_window_title()
-                             if window_title:
-                                 logging.info(f"ℹ️ Fallback: Usando título de ventana: {window_title}")
-                                 raw_name = window_title
-                             else:
-                                 raw_name = ""
-                        
-                        if raw_name:
-                            clean_name, video_type = utils.extraer_datos_video(raw_name)
-                            if clean_name:
-                                stats_text = self._process_video_stats(video)
-                                
-                                # PRIORIDAD 1: STREMIO (Si no hay música)
-                                self.connect_discord(self.config["client_id"])
-                                self._update_rpc(clean_name, video_type, stats_text, raw_name)
-                                self.last_source = "stremio"
-                                stremio_active = True
+                    stremio_active = self._handle_stremio_rpc()
                 
                 # C. Limpieza
-                # Si no hay música activa Y no hay stremio activo -> Limpiar
                 if not music_active and not stremio_active:
-                     # Si veníamos de música, limpiamos siempre
-                     if self.last_source == "music":
-                         self._clear_rpc()
-                         self.last_source = None
-                     # Si veníamos de Stremio, _clear_rpc manejará si debe mantenerse o cerrarse
-                     elif self.last_source == "stremio":
-                         self._clear_rpc()
-                         self.last_source = None
+                    self._cleanup_rpc()
 
             except Exception as e:
                 logging.error(f"Error Loop: {e}")
