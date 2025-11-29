@@ -299,6 +299,15 @@ def get_stremio_window_title():
         logging.error(f"Error obteniendo título de ventana: {e}")
         
     return None      
+def parse_version(v_str):
+    """Parsea una versión 'v1.2.3' a una tupla (1, 2, 3)."""
+    try:
+        # Eliminar 'v' y posibles sufijos, quedarse solo con números y puntos
+        clean = v_str.lower().lstrip('v').split('-')[0]
+        return tuple(map(int, clean.split('.')))
+    except:
+        return (0, 0, 0)
+
 def check_for_updates(current_version):
     """
     Comprueba si hay una nueva versión en GitHub.
@@ -311,11 +320,11 @@ def check_for_updates(current_version):
             data = resp.json()
             latest_tag = data.get("tag_name", "").strip()
             
-            # Limpieza básica de 'v' (v5.2 -> 5.2)
-            curr = current_version.lower().lstrip('v')
-            latest = latest_tag.lower().lstrip('v')
+            curr_ver = parse_version(current_version)
+            latest_ver = parse_version(latest_tag)
             
-            if curr != latest:
+            # Solo avisar si la versión de GitHub es MAYOR que la actual
+            if latest_ver > curr_ver:
                 return True, latest_tag
     except Exception as e:
         logging.error(f"Error buscando actualizaciones: {e}")
