@@ -16,8 +16,8 @@ def get_robust_session():
     """Retorna una sesión de requests con política de reintentos."""
     session = requests.Session()
     retry = Retry(
-        total=0, # [OPTIMIZACION] Fail fast si Stremio no está (evita delay de 15s)
-        backoff_factor=0,
+        total=1, # [OPTIMIZACION] 1 reintento para evitar desconexiones por micro-cortes
+        backoff_factor=0.1,
         status_forcelist=[500, 502, 503, 504],
         allowed_methods=["GET"]
     )

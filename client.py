@@ -27,6 +27,8 @@ class StremioRPCClient:
         self.last_source = None # "stremio" or "music"
         self.current_client_id = None
         self.stremio_was_connected = False # [NUEVO] Para logs de conexión
+        self.session = utils.get_robust_session() # [OPTIMIZACION] Sesión persistente (Keep-Alive)
+        self.last_stream_idx = None # [NUEVO] Para detectar cambios de episodio en packs
 
     def connect_discord(self, target_id=None):
         """Conecta a Discord con el ID especificado. Si cambia el ID, reconecta."""
@@ -59,16 +61,21 @@ class StremioRPCClient:
         return self.rpc
 
     def _fetch_stremio_data(self):
-        """Intenta obtener datos de Stremio. Retorna (connected, data)."""
+        """Intenta obtener datos de Stremio. Retorna (connected, data, error)."""
         try:
-            # Usamos la sesión robusta de utils
-            session = utils.get_robust_session()
-            response = session.get("http://127.0.0.1:11470/stats.json", timeout=3)
+            # Usamos la sesión persistente
+            response = self.session.get("http://127.0.0.1:11470/stats.json", timeout=3)
             if response.status_code == 200:
-                return True, response.json()
-        except requests.RequestException:
-            pass
-        return False, {}
+                return True, response.json(), None
+            else:
+                return False, {}, f"Status {response.status_code}"
+        except Exception as e:
+            msg = str(e)
+            if "10061" in msg or "refused" in msg:
+                msg = "No se pudo conectar (Stremio cerrado)"
+            elif "Max retries exceeded" in msg:
+                msg = "Tiempo de espera agotado"
+            return False, {}, msg
 
     def _process_video_stats(self, video):
         """Calcula estadísticas de descarga."""
@@ -82,7 +89,7 @@ class StremioRPCClient:
             pass
         return None
 
-    def _update_rpc(self, clean_name, video_type, stats_text, raw_name):
+    def _update_rpc(self, clean_name, video_type, stats_text, raw_name, stream_idx=None):
         """Actualiza la presencia de Discord si es necesario."""
         
         # [MODIFICADO] Asegurar conexión si se cerró previamente para historial
@@ -114,16 +121,27 @@ class StremioRPCClient:
         # 2. Si veníamos de vacío (Inicio o tras Clear) -> RESET
         elif not self.last_raw_title:
             should_reset_timer = True
+
+        # [NUEVO] 3. Si pasamos de "Sin ID" a "Con ID" (Peli -> Serie o Fallback -> Serie)
+        elif new_ep_id and not old_ep_id:
+             should_reset_timer = True
             
-        # 3. Si no hay IDs (Peliculas), confiamos en el cambio de raw_name
+        # 4. Si no hay IDs (Peliculas), confiamos en el cambio de raw_name
         # PERO solo si no parece un fallback (es decir, si el clean_name también cambió)
         elif not new_ep_id and not old_ep_id:
             if raw_name != self.last_raw_title and clean_name != self.last_title:
                 should_reset_timer = True
 
-        # Actualizamos siempre el raw title
+        # [NUEVO] 5. Si cambia el índice del stream (Para packs donde el nombre no cambia)
+        elif stream_idx is not None and self.last_stream_idx is not None and stream_idx != self.last_stream_idx:
+            should_reset_timer = True
+
+        # Actualizamos siempre el raw title y stream_idx
         if raw_name != self.last_raw_title:
              self.last_raw_title = raw_name
+        
+        if stream_idx is not None:
+            self.last_stream_idx = stream_idx
 
         if should_reset_timer:
             self.start_time = time.time()
@@ -191,9 +209,6 @@ class StremioRPCClient:
             files = video.get('files', [])
             selections = video.get('selections', [])
             
-            # logging.info(f"🐛 DEBUG: VideoKeys={list(video.keys())}")
-            # logging.info(f"🐛 DEBUG: FilesCount={len(files)}, SelectionsCount={len(selections)}")
-
             if not files or not selections:
                 # logging.info("🐛 DEBUG: Files or Selections empty. Returning None.")
                 return None
@@ -215,9 +230,7 @@ class StremioRPCClient:
                     max_prio = prio
                     prio_piece = s.get('from', 0)
             
-            # logging.info(f"DEBUG: MaxPiece={max_piece}, PrioPiece={prio_piece}, Selections={len(selections)}")
-            
-            # logging.info(f"DEBUG: MaxPiece={max_piece}, PrioPiece={prio_piece}, Selections={len(selections)}")
+            # logging.info(f"DEBUG: MaxPiece={max_piece}, PrioPiece={prio_piece}, MaxPrio={max_prio}")
             
             if prio_piece == -1: 
                 # [MODIFICADO] Fallback para videos 100% buferados
@@ -227,11 +240,11 @@ class StremioRPCClient:
                     prio_piece = selections[0].get('from', 0)
                     # logging.info(f"🐛 DEBUG: Using fallback prio_piece={prio_piece}")
                 else:
-                    logging.info("🐛 DEBUG: No active piece found and no selections")
+                    # logging.info("🐛 DEBUG: No active piece found and no selections")
                     return None
 
             if max_piece == 0: 
-                logging.info("🐛 DEBUG: Max piece is 0")
+                # logging.info("🐛 DEBUG: Max piece is 0")
                 return None
 
             # 2. Estimar tamaño de pieza (Upper Bound Logic)
@@ -252,7 +265,7 @@ class StremioRPCClient:
             # 3. Calcular offset y buscar archivo
             current_offset = prio_piece * piece_size
             
-            # logging.info(f"🐛 DEBUG: Offset={current_offset}, Files={len(files)}, PieceSize={piece_size}")
+            # logging.info(f"🐛 DEBUG: Offset={current_offset}, PieceSize={piece_size}")
 
             for f in files:
                 start = f.get('offset', 0)
@@ -299,7 +312,7 @@ class StremioRPCClient:
             # 4. Recency (slight preference for later items in the list)
             score += 1
             
-            # logging.info(f"🐛 Candidate: {video.get('name', 'Unknown')} | Score: {score}")
+            # logging.info(f"🐛 Candidate: {video.get('name', 'Unknown')[:30]}... | Score: {score} | ActiveFile: {active_file}")
             
             if score > best_score:
                 best_score = score
@@ -355,14 +368,14 @@ class StremioRPCClient:
     def _handle_stremio_rpc(self):
         """Maneja la lógica de detección y RPC de Stremio."""
         # A. Intentar leer Stremio
-        connected, data = self._fetch_stremio_data()
+        connected, data, error_msg = self._fetch_stremio_data()
         
         # Log de estado de conexión
         if connected and not self.stremio_was_connected:
             logging.info("✅ Stremio detectado (API conectada)")
             self.stremio_was_connected = True
         elif not connected and self.stremio_was_connected:
-            logging.info("❌ Stremio cerrado o API desconectada")
+            logging.info(f"❌ Stremio cerrado o API desconectada. Razón: {error_msg}")
             self.stremio_was_connected = False
 
         if connected and len(data) > 0:
@@ -395,9 +408,20 @@ class StremioRPCClient:
                     
                     # PRIORIDAD 1: STREMIO (Si no hay música)
                     self.connect_discord(self.config["client_id"])
-                    self._update_rpc(clean_name, video_type, stats_text, raw_name)
+                    
+                    # Extraer streamIdx si existe
+                    stream_idx = video.get("streamIdx")
+                    
+                    self._update_rpc(clean_name, video_type, stats_text, raw_name, stream_idx)
                     self.last_source = "stremio"
                     return True
+        
+        # [DEBUG] Log si estamos conectados pero no hay datos (o no hay video válido)
+        if connected and len(data) == 0:
+             # Solo loguear una vez para no spammear
+             if self.last_source == "stremio":
+                 logging.info("ℹ️ Stremio conectado pero sin datos de reproducción (Menú/Pausa).")
+        
         return False
 
     def _cleanup_rpc(self):
