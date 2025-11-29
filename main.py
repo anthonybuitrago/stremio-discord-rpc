@@ -98,7 +98,7 @@ if __name__ == '__main__':
         sys.exit(0)
     
     # [NUEVO] Chequeo de actualizaciones
-    CURRENT_VERSION = "v5.4"
+    CURRENT_VERSION = "v5.5"
     has_update, new_version = utils.check_for_updates(CURRENT_VERSION)
     if has_update:
         logging.warning(f"⚠️ ¡Nueva versión disponible: {new_version}!")
