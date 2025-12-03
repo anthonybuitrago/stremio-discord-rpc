@@ -1,0 +1,39 @@
+{
+    "manifest_version": 3,
+    "name": "MediaRPC Helper",
+    "version": "1.0",
+    "description": "Sends media information from YouTube Music and Stremio Web to MediaRPC.",
+    "permissions": [
+        "tabs",
+        "scripting"
+    ],
+    "host_permissions": [
+        "https://music.youtube.com/*",
+        "https://web.stremio.com/*",
+        "http://127.0.0.1:9696/*"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://music.youtube.com/*"
+            ],
+            "js": [
+                "content_ytm.js"
+            ]
+        },
+        {
+            "matches": [
+                "https://web.stremio.com/*"
+            ],
+            "js": [
+                "content_stremio.js"
+            ]
+        }
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "icons": {
+        "128": "icon128.png"
+    }
+}

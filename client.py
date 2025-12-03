@@ -11,6 +11,7 @@ import config_manager
 import utils
 import media_manager
 import smtc_manager
+import server
 
 class StremioRPCClient:
     def __init__(self):
@@ -29,6 +30,10 @@ class StremioRPCClient:
         self.stremio_was_connected = False # [NUEVO] Para logs de conexión
         self.session = utils.get_robust_session() # [OPTIMIZACION] Sesión persistente (Keep-Alive)
         self.last_stream_idx = None # [NUEVO] Para detectar cambios de episodio en packs
+        
+        # [EXTENSION]
+        self.extension_info = None
+        server.start_server(self._on_extension_update)
 
     def connect_discord(self, target_id=None):
         """Conecta a Discord con el ID especificado. Si cambia el ID, reconecta."""
@@ -314,6 +319,91 @@ class StremioRPCClient:
         
         return best_candidate
 
+    def _on_extension_update(self, data):
+        """Callback cuando la extensión envía datos."""
+        self.extension_info = {
+            "data": data,
+            "timestamp": time.time()
+        }
+
+    def _handle_extension_rpc(self):
+        """Maneja datos provenientes de la extensión (Prioridad Máxima)."""
+        if not self.extension_info:
+            return False
+            
+        # Verificar si los datos son recientes (3 segundos de validez)
+        if time.time() - self.extension_info["timestamp"] > 3:
+            return False
+            
+        data = self.extension_info["data"]
+        
+        if not data.get("is_playing"):
+            return False
+
+        # 1. YouTube Music
+        if data["source"] == "youtube_music":
+            if not self.config.get("enable_music_rpc", True):
+                return False
+
+            target_id = self.config.get("music_client_id") or self.config["client_id"]
+            self.connect_discord(target_id)
+            
+            # Evitar spam
+            if (self.last_source == "extension_music" and 
+                self.last_media_name == data['title'] and
+                self.last_artist == data['artist']):
+                return True
+
+            self.last_source = "extension_music"
+            self.last_media_name = data['title']
+            self.last_artist = data['artist']
+            
+            logging.info(f"🌐 Extensión (Music): {data['title']} - {data['artist']}")
+            
+            self.rpc.update(
+                activity_type=ActivityType.LISTENING,
+                details=data['title'],
+                state=data['artist'],
+                large_image=data['cover'] if data['cover'] else "music_icon",
+                # small_image="music_icon",
+                # small_text="YouTube Music (Web)"
+            )
+            return True
+
+        # 2. Stremio Web
+        elif data["source"] == "stremio_web":
+            target_id = self.config["client_id"]
+            self.connect_discord(target_id)
+            
+            # Limpieza básica del título
+            raw_title = data['title']
+            clean_name, video_type = utils.extraer_datos_video(raw_title)
+            
+            # Intentar buscar metadatos reales
+            if clean_name != self.last_title:
+                self.last_title = clean_name
+                logging.info(f"🌐 Extensión (Stremio): {clean_name}")
+                meta = media_manager.search_cinemeta(clean_name, video_type)
+                self.current_poster = meta["poster"]
+                self.official_title = meta["name"]
+            
+            # Actualizar RPC
+            # Usamos lógica simplificada para Stremio Web por ahora
+            if time.time() - self.last_update > 15:
+                self.rpc.update(
+                    activity_type=ActivityType.WATCHING,
+                    details=self.official_title,
+                    state=None,
+                    large_image=self.current_poster,
+                    start=self.start_time if self.start_time else time.time()
+                )
+                self.last_update = time.time()
+            
+            self.last_source = "extension_stremio"
+            return True
+
+        return False
+
     def _handle_music_rpc(self):
         """Maneja la lógica de detección y RPC de música."""
         if not self.config.get("enable_music_rpc", True):
@@ -449,15 +539,20 @@ class StremioRPCClient:
                 except: pass
 
             try:
-                # [MODIFICADO] PRIORIDAD: MÚSICA > STREMIO
-                music_active = self._handle_music_rpc()
+
+                # [MODIFICADO] PRIORIDAD: EXTENSIÓN > MÚSICA > STREMIO
+                extension_active = self._handle_extension_rpc()
+                
+                music_active = False
+                if not extension_active:
+                    music_active = self._handle_music_rpc()
                 
                 stremio_active = False
-                if not music_active:
+                if not extension_active and not music_active:
                     stremio_active = self._handle_stremio_rpc()
                 
                 # C. Limpieza
-                if not music_active and not stremio_active:
+                if not extension_active and not music_active and not stremio_active:
                     self._cleanup_rpc()
 
             except Exception as e:
