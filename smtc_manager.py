@@ -1,82 +1,71 @@
-import subprocess
-import json
+import asyncio
 import logging
-import os
-import sys
+import winsdk.windows.media.control as wmc
 
-import config_manager
+# Global session manager
+_manager = None
 
-# Path to the PowerShell script
-SCRIPT_PATH = os.path.join(config_manager.ASSET_DIR, "assets", "get_media_info.ps1")
-
-def get_media_info():
+async def get_media_info_async():
     """
-    Calls the PowerShell script to get Windows Media Controls info.
-    Returns a dict with title, artist, status, etc.
+    Async function to get media info using winsdk.
     """
+    global _manager
     try:
-        # Run PowerShell script
-        # We use -ExecutionPolicy Bypass to ensure it runs
-        cmd = ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", SCRIPT_PATH]
-        
-        # Hide window on Windows
-        startupinfo = None
-        if os.name == 'nt':
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
+        if _manager is None:
+            _manager = await wmc.GlobalSystemMediaTransportControlsSessionManager.request_async()
 
-        result = subprocess.run(
-            cmd, 
-            capture_output=True, 
-            text=True, 
-            encoding='utf-8', # Force UTF-8 for special chars
-            errors='replace', # [NUEVO] Evitar crash si hay caracteres raros
-            startupinfo=startupinfo,
-            creationflags=0x08000000, # CREATE_NO_WINDOW
-            timeout=3 # Fast timeout
-        )
-
-        if result.returncode != 0:
-            # logging.error(f"PowerShell Error: {result.stderr}")
+        session = _manager.get_current_session()
+        if not session:
             return None
 
-        if not result.stdout:
-            return None
-
-        output = result.stdout.strip()
-        if not output:
-            return None
-
-        # Parse JSON
-        try:
-            data = json.loads(output)
-        except json.JSONDecodeError:
-            return None
-        
-        # Check if we have valid data
-        if not data.get("title"):
-            return None
-
-        # Map to our format
-        source_id = data.get("source", "")
-        
-        # [FILTRO] Solo permitir YouTube Music (PWA)
-        # El ID suele ser algo como: music.youtube.com-5929F88E...
+        # Filter for YouTube Music (or make it configurable)
+        # source_id usually looks like "music.youtube.com-..."
+        source_id = session.source_app_user_model_id
         if "music.youtube.com" not in source_id.lower():
-            # logging.info(f"Ignorando fuente: {source_id}")
+            return None
+
+        info = session.get_playback_info()
+        props = await session.try_get_media_properties_async()
+
+        if not props:
             return None
 
         return {
-            "title": data.get("title"),
-            "artist": data.get("artist"),
-            "is_playing": data.get("status") == "Playing",
-            "status": data.get("status"),
+            "title": props.title,
+            "artist": props.artist,
+            "is_playing": info.playback_status == wmc.GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING,
+            "status": str(info.playback_status),
             "source": source_id,
-            "album_title": "YouTube Music", 
-            "cover_url": None 
+            "album_title": "YouTube Music", # Winsdk doesn't always give album reliably for web apps
+            "cover_url": None # Retrieving thumbnail is complex (stream), skipping for now
         }
 
     except Exception as e:
-        logging.error(f"Error in smtc_manager: {e}")
+        logging.error(f"Error in winsdk get_media_info: {e}")
+        return None
+
+def get_media_info():
+    """
+    Synchronous wrapper for the async function.
+    """
+    try:
+        # Create a new event loop if there isn't one, or use existing
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        if loop.is_running():
+            # If we are already in a loop (unlikely for this simple script structure but possible)
+            # We can't block. This might be an issue if main.py was async.
+            # But main.py calls this in a loop.
+            # For now, let's assume we can run_until_complete.
+            future = asyncio.run_coroutine_threadsafe(get_media_info_async(), loop)
+            return future.result()
+        else:
+            return loop.run_until_complete(get_media_info_async())
+            
+    except Exception as e:
+        logging.error(f"Error running async wrapper: {e}")
         return None

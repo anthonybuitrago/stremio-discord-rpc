@@ -1,6 +1,6 @@
 {
     "client_id": "1441601634374385696",
-    "update_interval": 5,
+    "update_interval": 1,
     "tolerance_seconds": 60,
     "show_search_button": true,
     "fixed_duration_minutes": 0,
