@@ -18,7 +18,7 @@ else:
 PATH_CONFIG = os.path.join(BASE_DIR, "config.json")
 PATH_LOG = os.path.join(BASE_DIR, "media_rpc_log.txt")
 PATH_ICON = os.path.join(ASSET_DIR, "assets", "rpc.ico")
-APP_VERSION = "v5.5.1"
+APP_VERSION = "v5.6.0"
 
 # --- CONFIGURACIÓN POR DEFECTO V5 ---
 DEFAULT_CONFIG = {
