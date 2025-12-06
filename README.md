@@ -1,95 +1,58 @@
-# 🚀 MediaRPC v5.3
+# 🚀 MediaRPC v5.6.3
 
-**MediaRPC** is a lightweight, "set and forget" Discord Rich Presence (RPC) tool for **Stremio** and **Music Players** (YouTube Music, Spotify, etc.) on Windows.
+**MediaRPC** is an advanced Discord Rich Presence (RPC) tool optimized for **HiAnime** and **YouTube Music** on Windows. It seamlessly integrates a **Browser Extension** with a lightweight desktop client to display your media activity in real-time.
 
-It automatically detects what you are watching or listening to and displays it on your Discord profile with high-quality cover art and metadata.
+## ✨ New in v5.6.3
 
-## ✨ Features
+### 📺 HiAnime Integration (Advanced)
+- **Exact Season Posters**: Scrapes the specific cover art for the season you are watching (e.g., *My Hero Academia Season 7*), instead of generic series posters.
+- **Smart Movie Display**: Automatically detects movies and hides "Episode 1" for a cleaner, title-only look.
+- **Anti-Flicker Technology**: Intelligent deduplication prevents your Discord status from flashing or resetting unnecessarily.
+- **Robust Episode Detection**: Uses multiple DOM selectors to guarantee episode numbers are captured correctly.
 
-- **🎬 Stremio Support**: Displays the movie or series you are watching, including episode details and progress.
-- **🎵 Music Support**: Detects music from media keys (YouTube Music, Spotify, etc.) and displays it with cover art.
-- **🖼️ Smart Metadata**:
-  - Fetches high-quality posters from **Cinemeta** (for video).
-  - Fetches album art from **iTunes (US/JP)** and **Deezer** (for music).
-- **⚡ Performance**: Optimized to run silently in the background with minimal resource usage.
-- **🔄 Robustness**: Auto-reconnects if Discord or Stremio is restarted.
-- **📝 Logging**: Detailed logs to help troubleshoot connection issues.
+### 🎵 YouTube Music (Enhanced)
+- **Silent Pause**: Pausing music instantly clears your Discord activity without spamming your local logs.
+- **Instant Resume**: Resuming playback triggers an immediate status update, even for the same song.
+- **Smart Switching**: Seamlessly transitions between Local Desktop detection and Browser Extension detection without log spam.
+
+### 🛠️ Core Improvements
+- **Clean Logs**: Console output is now 100% English, emoji-coded, and free of technical noise.
+- **Low Profile**: Runs silently in the system tray with minimal resource usage.
 
 ---
 
 ## 📥 Installation
 
-### Option 1: The Easy Way (Recommended)
-1. Go to the [Releases Page](../../releases).
-2. Download the latest `MediaRPC.exe`.
-3. Run it! A satellite icon 🛰️ will appear in your system tray.
-
-### Option 2: For Developers (Python)
-If you want to run from source or modify the code:
-
-1. Install [Python 3.10+](https://www.python.org/).
-2. Clone this repository:
-   ```bash
-   git clone https://github.com/anthonybuitrago/stremio-discord-rpc.git
-   cd stremio-discord-rpc
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Run the script:
-   ```bash
-   python main.py
-   ```
+1. **Download**: Get the latest `MediaRPC.exe` from the Releases page.
+2. **Install Extension**:
+   - Go to `chrome://extensions` in your browser (Chrome/Edge/Brave).
+   - Enable **Developer Mode** (top right switch).
+   - Click **"Load unpacked"** and select the `browser_extension` folder included in the release.
+3. **Run**: Double-click `MediaRPC.exe`. You will see a satellite icon (🛰️) in your system tray.
 
 ---
 
 ## 🎮 Usage
 
-### For Stremio
-1. Open **MediaRPC**.
-2. Open **Stremio** and start watching something.
-3. Check your Discord profile! It should show "Watching **[Movie/Series Name]**".
+- **Just Watch**: Open **HiAnime.to** and start any video. Discord will update automatically.
+- **Just Listen**: Open **music.youtube.com**. Discord will show your song with high-res album art.
 
-### For Music
-1. Open **MediaRPC**.
-2. Play music on **YouTube Music** (Desktop/Web), **Spotify**, or any player that supports Windows Media Controls.
-3. Discord will show "Listening to **[Song Name]**".
-
-> **Note:** Music takes priority over Stremio. If you pause music, Stremio status will return.
+> **Note**: If you restart your browser, simply reload the tab to reconnect to MediaRPC.
 
 ---
 
 ## ⚙️ Configuration
 
-A `config.json` file is created automatically in the same folder. You can edit it to customize behavior:
+A `config.json` is created automatically. Access it via Tray Menu -> **Configuración**.
 
 ```json
 {
-    "client_id": "1310468962450866226",  // Discord App ID for Stremio
-    "music_client_id": "1310468962450866226", // Discord App ID for Music (Optional)
-    "update_interval": 15,               // How often to update Discord (seconds)
-    "show_search_button": true,          // Show "Search Anime" button
-    "enable_music_rpc": true             // Enable/Disable music detection
+    "client_id": "YOUR_DISCORD_APP_ID",
+    "music_client_id": "OPTIONAL_MUSIC_APP_ID",
+    "show_search_button": true,
+    "enable_music_rpc": true
 }
 ```
 
----
-
-## 🛠️ Troubleshooting
-
-- **"It's not showing up on Discord!"**
-  - Make sure "Activity Privacy" -> "Display current activity as a status message" is **ON** in Discord settings.
-  - Check the system tray icon 🛰️. Right-click -> **View Logs** to see if there are errors.
-
-- **"Cover art is missing!"**
-  - MediaRPC searches multiple databases (Cinemeta, iTunes, Deezer). If a song/movie is very obscure, it might not find a match.
-
-- **"Stremio status is stuck?"**
-  - Right-click the tray icon -> **Restart RPC**.
-
----
-
 ## 📜 License
-
-This project is licensed under the **MIT License**. Feel free to modify and distribute it.
+MIT License.

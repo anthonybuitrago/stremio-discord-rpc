@@ -115,7 +115,7 @@ def search_cinemeta(nombre_busqueda, tipo_forzado="auto"):
             if match_anio:
                 nombre_sin_anio = nombre_busqueda[:match_anio.start()].strip()
                 if len(nombre_sin_anio) > 2:
-                    logging.info(f"🔄 Reintentando sin año: {nombre_sin_anio}")
+                    logging.info(f"🔄 Retrying without year: {nombre_sin_anio}")
                     ejecutar_busqueda(nombre_sin_anio)
 
     except Exception as e:
@@ -265,7 +265,7 @@ def get_media_info():
                             match_found = True
                             
                         if not match_found:
-                            # logging.info(f"⚠️ Descartando match falso: Local='{local_artist}' vs iTunes='{meta['artist']}'")
+                            # logging.info(f"⚠️ Discarding false match: Local='{local_artist}' vs iTunes='{meta['artist']}'")
                             meta = None
 
                     if meta:

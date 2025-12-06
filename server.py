@@ -22,6 +22,16 @@ def update_media():
 
 def run_flask():
     try:
+        # Suppress Flask CLI banner
+        # os.environ["WERKZEUG_RUN_MAIN"] = "true" <--- CAUSA DEL ERROR
+        import click
+        def secho(text, file=None, nl=None, err=None, color=None, **styles):
+            pass
+        def echo(text, file=None, nl=None, err=None, color=None, **styles):
+            pass
+        click.secho = secho
+        click.echo = echo
+
         # Suppress Flask logging
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
@@ -41,4 +51,4 @@ def start_server(callback):
     
     thread = threading.Thread(target=run_flask, daemon=True)
     thread.start()
-    logging.info("🌐 Servidor de extensión iniciado en puerto 9696")
+    # logging.info("🌐 Servidor de extensión iniciado en puerto 9696")

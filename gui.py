@@ -11,10 +11,10 @@ import webbrowser
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue") 
 
-# Colores Stremio
-STREMIO_PURPLE = "#5A4FCF"
-STREMIO_PURPLE_HOVER = "#483D8B"
-STREMIO_BG = "#151515"
+# Colores MediaRPC
+BRAND_COLOR = "#5A4FCF"
+BRAND_COLOR_HOVER = "#483D8B"
+BG_COLOR = "#151515"
 
 # Colores Discord
 DISCORD_BG = "#313338" # Fondo oscuro moderno
@@ -61,8 +61,8 @@ class ConfigWindow(ctk.CTk):
         self.tabview = ctk.CTkTabview(self, width=380, height=600)
         self.tabview.pack(padx=10, pady=10, fill="both", expand=True)
         
-        self.tabview.configure(segmented_button_selected_color=STREMIO_PURPLE)
-        self.tabview.configure(segmented_button_selected_hover_color=STREMIO_PURPLE_HOVER)
+        self.tabview.configure(segmented_button_selected_color=BRAND_COLOR)
+        self.tabview.configure(segmented_button_selected_hover_color=BRAND_COLOR_HOVER)
 
         self.tab_config = self.tabview.add("Ajustes")
         self.tab_logs = self.tabview.add("Logs")
@@ -85,7 +85,7 @@ class ConfigWindow(ctk.CTk):
         self.switch_btn = ctk.CTkSwitch(
             self.frame_appearance, 
             text="Mostrar Botón 'Buscar Anime'",
-            progress_color=STREMIO_PURPLE,
+            progress_color=BRAND_COLOR,
             font=("Roboto", 13)
         )
         if self.current_config.get("show_search_button", True):
@@ -95,7 +95,7 @@ class ConfigWindow(ctk.CTk):
         self.switch_music = ctk.CTkSwitch(
             self.frame_appearance, 
             text="Activar Detección de Música",
-            progress_color=STREMIO_PURPLE,
+            progress_color=BRAND_COLOR,
             font=("Roboto", 13)
         )
         if self.current_config.get("enable_music_rpc", True):
@@ -111,7 +111,7 @@ class ConfigWindow(ctk.CTk):
         self.switch_autostart = ctk.CTkSwitch(
             self.frame_system, 
             text="Iniciar con Windows",
-            progress_color=STREMIO_PURPLE,
+            progress_color=BRAND_COLOR,
             font=("Roboto", 13)
         )
         if utils.check_autostart():
@@ -147,8 +147,8 @@ class ConfigWindow(ctk.CTk):
             command=self.guardar_datos,
             height=40,
             font=("Roboto", 14, "bold"),
-            fg_color=STREMIO_PURPLE,
-            hover_color=STREMIO_PURPLE_HOVER,
+            fg_color=BRAND_COLOR,
+            hover_color=BRAND_COLOR_HOVER,
             corner_radius=10
         )
         self.btn_save.pack(fill="x", padx=20, pady=(10, 5))
@@ -188,8 +188,8 @@ class ConfigWindow(ctk.CTk):
             text="🔄 Actualizar",
             command=self.cargar_logs,
             width=140,
-            fg_color=STREMIO_PURPLE,
-            hover_color=STREMIO_PURPLE_HOVER
+            fg_color=BRAND_COLOR,
+            hover_color=BRAND_COLOR_HOVER
         )
         self.btn_refresh_logs.pack(side="right", padx=5)
         
@@ -244,7 +244,7 @@ class ConfigWindow(ctk.CTk):
             has_update, new_version = utils.check_for_updates(CURRENT_VERSION)
             
             if has_update:
-                self.btn_update.configure(text=f"¡Actualizar a {new_version}!", fg_color=STREMIO_PURPLE, state="normal")
+                self.btn_update.configure(text=f"¡Actualizar a {new_version}!", fg_color=BRAND_COLOR, state="normal")
                 self.btn_update.configure(command=lambda: webbrowser.open("https://github.com/anthonybuitrago/stremio-discord-rpc/releases"))
             else:
                 self.btn_update.configure(text=f"Estás actualizado ({CURRENT_VERSION})", fg_color="green", state="normal")

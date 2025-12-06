@@ -180,7 +180,7 @@ def toggle_autostart(icon, item):
     if os.path.exists(link_path):
         try:
             os.remove(link_path)
-            logging.info("🗑️ Auto-start desactivado.")
+            logging.info("🗑️ Auto-start disabled.")
             # Opcional: Notificar al usuario visualmente si fuera posible
         except Exception as e:
             logging.error(f"Error borrando link: {e}")
@@ -204,7 +204,7 @@ def toggle_autostart(icon, item):
                 ["powershell", "-Command", ps_script], 
                 creationflags=0x08000000 # CREATE_NO_WINDOW
             )
-            logging.info("✅ Auto-start activado (Modo Silencioso).")
+            logging.info("✅ Auto-start enabled (Silent Mode).")
         except Exception as e:
             logging.error(f"Error creando link: {e}")
 

@@ -44,9 +44,15 @@ function getInfo() {
 }
 
 // Loop to send data
-setInterval(() => {
+const intervalId = setInterval(() => {
     const data = getInfo();
     if (data) {
-        chrome.runtime.sendMessage(data);
+        try {
+            chrome.runtime.sendMessage(data);
+        } catch (e) {
+            // Extension context invalidated (Extension reloaded or disabled)
+            console.log("MediaRPC: Connection lost. Stopping script.");
+            clearInterval(intervalId);
+        }
     }
 }, 1000);

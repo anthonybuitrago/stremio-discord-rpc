@@ -2,14 +2,18 @@
     "manifest_version": 3,
     "name": "MediaRPC Helper",
     "version": "1.0",
-    "description": "Sends media information from YouTube Music and Stremio Web to MediaRPC.",
+    "description": "Sends media information from YouTube Music and HiAnime to MediaRPC.",
     "permissions": [
         "tabs",
         "scripting"
     ],
     "host_permissions": [
         "https://music.youtube.com/*",
-        "https://web.stremio.com/*",
+        "https://hianime.to/*",
+        "https://www.hianime.to/*",
+        "*://*.hianime.to/*",
+        "*://megaplay.buzz/*",
+        "*://megacloud.tv/*",
         "http://127.0.0.1:9696/*"
     ],
     "content_scripts": [
@@ -23,11 +27,16 @@
         },
         {
             "matches": [
-                "https://web.stremio.com/*"
+                "https://hianime.to/*",
+                "https://www.hianime.to/*",
+                "*://*.hianime.to/*",
+                "*://megaplay.buzz/*",
+                "*://megacloud.tv/*"
             ],
             "js": [
-                "content_stremio.js"
-            ]
+                "content_hianime.js"
+            ],
+            "all_frames": true
         }
     ],
     "background": {

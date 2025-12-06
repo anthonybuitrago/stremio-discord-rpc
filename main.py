@@ -10,7 +10,7 @@ import sys
 import config_manager
 import utils
 import gui
-from client import StremioRPCClient
+from client import MediaRPCClient
 
 # [FIX] Forzar UTF-8 en consola Windows para evitar errores con emojis
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     kernel32 = ctypes.windll.kernel32
     mutex = kernel32.CreateMutexW(None, False, "Global\\MediaRPC_Instance_Mutex_v5")
     if kernel32.GetLastError() == 183: # ERROR_ALREADY_EXISTS
-        logging.error("❌ Otra instancia ya está corriendo. Cerrando...")
+        logging.error("❌ Another instance is already running. Closing...")
         sys.exit(0)
     
     # [NUEVO] Chequeo de actualizaciones
@@ -104,7 +104,7 @@ if __name__ == '__main__':
         logging.warning(f"⚠️ ¡Nueva versión disponible: {new_version}!")
         logging.warning(f"Descárgala en: https://github.com/anthonybuitrago/stremio-discord-rpc/releases")
 
-    client = StremioRPCClient()
+    client = MediaRPCClient()
     
     thread = threading.Thread(target=client.run_logic)
     thread.daemon = True
