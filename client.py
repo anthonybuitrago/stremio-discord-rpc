@@ -185,9 +185,9 @@ class StremioRPCClient:
             # Esto corrige el bug donde la actividad persistía al cerrar Stremio.
 
             if self.rpc:
-                if self.last_source == "music":
+                if self.last_source in ["music", "extension_music"]:
                     # Para música, queremos que desaparezca INSTANTÁNEAMENTE
-                    logging.info("🧹 Limpiando actividad de música...")
+                    # logging.info("🧹 Limpiando actividad de música...")
                     self.rpc.clear()
                 else:
                     # Para Stremio, cerramos conexión para intentar dejar "Actividad Reciente"
@@ -333,8 +333,8 @@ class StremioRPCClient:
         if not self.extension_info:
             return False
             
-        # Verificar si los datos son recientes (3 segundos de validez)
-        if time.time() - self.extension_info["timestamp"] > 3:
+        # Verificar si los datos son recientes (10 segundos de validez)
+        if time.time() - self.extension_info["timestamp"] > 10:
             return False
             
         data = self.extension_info["data"]
@@ -560,17 +560,13 @@ class StremioRPCClient:
 
     def _cleanup_rpc(self):
         """Limpia o cierra la conexión RPC si no hay actividad."""
-        # Si veníamos de música, limpiamos siempre
-        if self.last_source == "music":
-            self._clear_rpc()
-            self.last_source = None
-        # Si veníamos de Stremio, _clear_rpc manejará si debe mantenerse o cerrarse
-        elif self.last_source == "stremio":
+        # Limpiamos si hay alguna fuente activa previa
+        if self.last_source:
             self._clear_rpc()
             self.last_source = None
 
     def run_logic(self):
-        logging.info("🚀 Media RPC v5.5.1 Iniciado")
+        logging.info(f"🚀 Media RPC {config_manager.APP_VERSION} Iniciado")
         # [OPTIMIZACION] No conectamos al inicio por defecto.
 
         while self.running:
@@ -593,8 +589,16 @@ class StremioRPCClient:
                 # [MODIFICADO] PRIORIDAD: EXTENSIÓN > MÚSICA > STREMIO
                 extension_active = self._handle_extension_rpc()
                 
+                # Check if extension is connected (alive recently)
+                # If extension is connected but NOT active (Paused), we MUST skip music_rpc
+                # to avoid falling back to SMTC which might incorrectly report "Playing".
+                is_ext_active_or_connected = False
+                if self.extension_info and (time.time() - self.extension_info["timestamp"] < 10):
+                    is_ext_active_or_connected = True
+
                 music_active = False
-                if not extension_active:
+                # Solo chequeamos SMTC si la extensión NO está presente ni activa
+                if not extension_active and not is_ext_active_or_connected:
                     music_active = self._handle_music_rpc()
                 
                 stremio_active = False
