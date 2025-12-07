@@ -13,14 +13,17 @@ function getInfo() {
             timestamp: Date.now()
         };
 
-        // --- Debugging ---
-        // console.log("[MediaRPC] Content Script v2.3 Loaded");
-
-        // --- 1. PLAYBACK DATA (Iframe / Player) ---
+        // --- 1. PLAYBACK & VISIBILITY DATA ---
         const video = document.querySelector("video");
+
+        // [NUEVO] Si la pestaña está oculta (minimizada o en otro tab), forzamos pausa
+        const isHidden = document.hidden;
+        data.is_hidden = isHidden; // GLOBAL: Sent even if no video found
+
         if (video) {
             data.type = "playback";
-            data.is_playing = !video.paused;
+            // Está sonando SOLO si el video corre Y la pestaña es visible
+            data.is_playing = !video.paused && !isHidden;
             data.current_time = video.currentTime;
             data.total_time = video.duration;
         }
